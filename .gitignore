@@ -1,0 +1,6 @@
+*.o
+*.out
+*.c~
+*.tmp
+*.m~
+.DS_Store
