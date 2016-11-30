@@ -103,6 +103,15 @@ main(int argc, char * args[])
   ierr = KSPSolve(ksp, b, u);
   CHKERRQ(ierr);
 
+
+  PetscViewer viewer;
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec.m", &viewer);
+  PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  VecView(u,viewer);
+  PetscViewerPopFormat(viewer);
+  PetscViewerDestroy(&viewer);
+
+
   // Verifies the implementation by comparing the
   // numerical solution to the analytical solution
   // The function computes a norm of the difference
@@ -373,6 +382,13 @@ compute_opt(KSP ksp, Mat A, Mat J, void * ctx)
   CHKERRQ(ierr);
   ierr = MatAssemblyEnd(A ,MAT_FINAL_ASSEMBLY);
   CHKERRQ(ierr);
+  
+  // PetscViewer viewer;
+  // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Amat.m", &viewer);
+  // PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  // MatView(A,viewer);
+  // PetscViewerPopFormat(viewer);
+  // PetscViewerDestroy(&viewer);
 
   PetscFunctionReturn(0);
 }
