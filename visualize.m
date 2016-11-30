@@ -13,6 +13,8 @@ tmp_Uvec;
 dim = int8(round(abs(max(size(Vec_0x84000000_0))))^(1/3));
 u = reshape(Vec_0x84000000_0, dim, dim, dim);
 
+u = resample3Dimage(u, 2);
+
 %%
 % for i=2:max(size(u))-1
 %     clf; imagesc(squeeze(u(i,:,:))); title(num2str(i)); drawnow; pause(0.2);
