@@ -96,12 +96,12 @@ main(int argc, char * args[])
 
   // VecView(b,PETSC_VIEWER_STDOUT_WORLD);
 
-  // PetscViewer viewer;
-  // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Bvec.m", &viewer);
-  // PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-  // VecView(b,viewer);
-  // PetscViewerPopFormat(viewer);
-  // PetscViewerDestroy(&viewer);
+  PetscViewer viewer;
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec.m", &viewer);
+  PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  VecView(u,viewer);
+  PetscViewerPopFormat(viewer);
+  PetscViewerDestroy(&viewer);
 
   ierr = VecCopy(u,b);   CHKERRQ(ierr);   // copy vector u to b
   ierr = VecCopy(um2,um3);   CHKERRQ(ierr);   // copy vector um2 to um3
@@ -204,9 +204,18 @@ compute_rhs(KSP ksp, Vec b, void * ctx)
 
           double f = hx * hy * hz; // Scaling
 
-          f *=  2.f * (-y2 * (-1.f + y2) * z2 * (-1.f + z2)  + 
-                x4 * (z2 - z4 + y4 * (-1.f + 6.f * z2) + y2 * (1.f - 12.f * z2 + 6.f * z4)) + 
-                x2 * (z2 * (-1.f + z2) + y2 * (-1.f + 18.f * z2 - 12.f * z4) + y4 * (1.f - 12.f * z2 + 6.f * z4)));
+          // f *=  2.f * (-y2 * (-1.f + y2) * z2 * (-1.f + z2)  + 
+          //       x4 * (z2 - z4 + y4 * (-1.f + 6.f * z2) + y2 * (1.f - 12.f * z2 + 6.f * z4)) + 
+          //       x2 * (z2 * (-1.f + z2) + y2 * (-1.f + 18.f * z2 - 12.f * z4) + y4 * (1.f - 12.f * z2 + 6.f * z4)));
+
+          if ((i>=6) && (i<=8) && (j>=6) && (j<=8) && (k>=6) && (k<=8))
+          {
+            f *= 5.f;
+          }
+          else
+          {
+            f *= 0.f;
+          }
 
           _b[k][j][i] = f;
         }
