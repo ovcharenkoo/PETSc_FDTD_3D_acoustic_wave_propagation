@@ -27,4 +27,4 @@
 #echo 3D
 #echo
 
-mpirun -n 4 ./ps_3D.out -ksp_type cg -pc_type ilu -da_refine 1 -ksp_rtol 1.0e-7 -ksp_converged_reason -ksp_monitor -mat_view ::info_detail #draw -draw_pause 5 # -log_view
+mpirun -n 1 ./p3D1.out -ksp_type cg -pc_type mg -ksp_converged_reason -ksp_monitor
