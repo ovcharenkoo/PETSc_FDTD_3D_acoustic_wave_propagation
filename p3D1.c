@@ -39,24 +39,21 @@ main(int argc, char * args[])
 
   // Initialize the PETSc database and MPI
   // "petsc.opt" is the PETSc database file
-  ierr = PetscInitialize(&argc, &args, NULL, NULL);
-  CHKERRQ(ierr); // PETSc error handler
+  ierr = PetscInitialize(&argc, &args, NULL, NULL);   CHKERRQ(ierr); // PETSc error handler
 
-  // The global PETSc MPI communicator
-  MPI_Comm comm = PETSC_COMM_WORLD;
+  MPI_Comm comm = PETSC_COMM_WORLD;   // The global PETSc MPI communicator
   /*
     PETSc DM
     Create a default 16x16 2D grid object
     The minus sign means that the grid x and y dimensions
     are changeable through the command-line options
   */
+
   DM da;
 
     ierr = DMDACreate3d(comm, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED,
                       DMDA_STENCIL_STAR, -17, -17, -17, PETSC_DECIDE, PETSC_DECIDE,
-                      PETSC_DECIDE, 1, 1, NULL, NULL, NULL, &da);
-
-  CHKERRQ(ierr);
+                      PETSC_DECIDE, 1, 1, NULL, NULL, NULL, &da);   CHKERRQ(ierr);
 
   /*
     PETSc Vec
@@ -66,51 +63,38 @@ main(int argc, char * args[])
   Vec u;
   // Create a global vector derived from the DM object
   // "Global" means "distributed" in MPI language
-  ierr = DMCreateGlobalVector(da, &u);
-  CHKERRQ(ierr);
+  ierr = DMCreateGlobalVector(da, &u);   CHKERRQ(ierr);
 
   /* 
     The right-hand side vector approximating the values of f_{i,j}
   */
   Vec b;
-  // Duplicate creates a new vector of the same type as u
-  ierr = VecDuplicate(u, &b);
-  CHKERRQ(ierr);
+  ierr = VecDuplicate(u, &b);   CHKERRQ(ierr);   // Duplicate creates a new vector of the same type as u
 
-
-//  PetscViewerSocketOpen(PETSC_COMM_WORLD, NULL, PETSC_DEFAULT, PetscViewer &viewer);
+  Vec um1, um2, um3;
+  ierr = VecDuplicate(u, &um1); CHKERRQ(ierr);  // u at time n-1
+  ierr = VecDuplicate(u, &um2); CHKERRQ(ierr);  // u at time n-2
+  ierr = VecDuplicate(u, &um3); CHKERRQ(ierr);  // u at time n-3 
 
   /* 
     Krylov Subspace (KSP) object to solve the linear system
   */
   KSP ksp;
-  // Create the KPS object
-  ierr = KSPCreate(comm, &ksp);
-  CHKERRQ(ierr);
-  // Set the DM to be used as preconditioner
-  ierr = KSPSetDM(ksp, (DM) da);
-  CHKERRQ(ierr);
-  // Compute the right-hand side vector b
-  ierr = KSPSetComputeRHS(ksp, compute_rhs, NULL);
-  CHKERRQ(ierr);
-  // Compute and assemble the coefficient matrix A
-  ierr = KSPSetComputeOperators(ksp, compute_opt, NULL);
-  CHKERRQ(ierr);
-  // KSP options can be changed during the runtime
-  ierr = KSPSetFromOptions(ksp);
-  CHKERRQ(ierr);
-  // Solve the linear system using KSP
 
-  PetscBool flg;
+  ierr = KSPCreate(comm, &ksp);   CHKERRQ(ierr);   // Create the KPS object
+  ierr = KSPSetDM(ksp, (DM) da);   CHKERRQ(ierr);   // Set the DM to be used as preconditioner
+  ierr = KSPSetComputeRHS(ksp, compute_rhs, NULL);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  ierr = KSPSetComputeOperators(ksp, compute_opt, NULL);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
+  ierr = KSPSetFromOptions(ksp);   CHKERRQ(ierr);   // KSP options can be changed during the runtime
+
+  // PetscBool flg;
   for (int ctr = 1; ctr<=2; ctr++)
   {
-  ierr = VecZeroEntries(u);
-  CHKERRQ(ierr);
-  
-  VecView(b,PETSC_VIEWER_STDOUT_WORLD);
+  ierr = VecZeroEntries(u);   CHKERRQ(ierr);  // Set all vector values equal to zero
 
-  ierr = KSPSolve(ksp, b, u);
-  CHKERRQ(ierr);
+  ierr = KSPSolve(ksp, b, u);   CHKERRQ(ierr);   // Solve the linear system using KSP
+
+  // VecView(b,PETSC_VIEWER_STDOUT_WORLD);
 
   // PetscViewer viewer;
   // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Bvec.m", &viewer);
@@ -119,16 +103,10 @@ main(int argc, char * args[])
   // PetscViewerPopFormat(viewer);
   // PetscViewerDestroy(&viewer);
 
-
-  // PetscViewer viewer;
-  // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec.m", &viewer);
-  // PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-  // VecView(u,viewer);
-  // PetscViewerPopFormat(viewer);
-  // PetscViewerDestroy(&viewer);
-
-  ierr = VecCopy(u,b);
-  CHKERRQ(ierr);
+  ierr = VecCopy(u,b);   CHKERRQ(ierr);   // copy vector u to b
+  ierr = VecCopy(um2,um3);   CHKERRQ(ierr);   // copy vector um2 to um3
+  ierr = VecCopy(um1,um2);   CHKERRQ(ierr);   // copy vector um1 to um2
+  ierr = VecCopy(u,um1);   CHKERRQ(ierr);   // copy vector u to um1
 
   // VecEqual(u,b,&flg);
   // if (flg)
@@ -142,25 +120,21 @@ main(int argc, char * args[])
   // numerical solution to the analytical solution
   // The function computes a norm of the difference
   // between the computed solution and the exact solution
-  ierr = test_convergence_rate(ksp, u);
-  CHKERRQ(ierr);
+  ierr = test_convergence_rate(ksp, u);   CHKERRQ(ierr);
   }
   /*
     Cleanup the allocations, and exit
   */
-  ierr = VecDestroy(&u);
-  CHKERRQ(ierr);
-  ierr = VecDestroy(&b);
-  CHKERRQ(ierr);
-  ierr = KSPDestroy(&ksp);
-  CHKERRQ(ierr);
-  ierr = DMDestroy(&da);
-  CHKERRQ(ierr);
+  ierr = VecDestroy(&u);   CHKERRQ(ierr);
+  ierr = VecDestroy(&um1);   CHKERRQ(ierr);
+  ierr = VecDestroy(&um2);   CHKERRQ(ierr);
+  ierr = VecDestroy(&um3);   CHKERRQ(ierr);
+  ierr = VecDestroy(&b);   CHKERRQ(ierr);
+  ierr = KSPDestroy(&ksp);   CHKERRQ(ierr);
+  ierr = DMDestroy(&da);   CHKERRQ(ierr);
 
-  // Exit the MPI communicator and finalize the PETSc
-  // initialization objects
-  ierr = PetscFinalize();
-  CHKERRQ(ierr);
+  // Exit the MPI communicator and finalize the PETSc initialization objects
+  ierr = PetscFinalize();   CHKERRQ(ierr);
 
   return 0;
 }
@@ -177,13 +151,11 @@ compute_rhs(KSP ksp, Vec b, void * ctx)
 
   /* Get the DM oject of the KSP */
   DM da;
-  ierr = KSPGetDM(ksp, &da);
-  CHKERRQ(ierr);
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);
 
   /* Get the global information of the DM grid*/
   DMDALocalInfo grid;
-  ierr = DMDAGetLocalInfo(da, &grid);
-  CHKERRQ(ierr);
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);
 
   /* Grid spacing */
   double hx = (1.f / (double) (grid.mx - 1));
@@ -193,8 +165,7 @@ compute_rhs(KSP ksp, Vec b, void * ctx)
   /*  A pointer to access b, the right-hand side PETSc vector
       viewed as a C array */
   double *** _b;
-  ierr = DMDAVecGetArray(da, b, &_b);
-  CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, b, &_b);   CHKERRQ(ierr);
 
   /*
     Loop over the grid points, and fill b 
@@ -243,11 +214,7 @@ compute_rhs(KSP ksp, Vec b, void * ctx)
     }
   }
 
-  // Release the resource
-  ierr = DMDAVecRestoreArray(da, b, &_b);
-  CHKERRQ(ierr);
-
-  // VecView(b, PetscViewer viewer);
+  ierr = DMDAVecRestoreArray(da, b, &_b);   CHKERRQ(ierr);   // Release the resource
 
   PetscFunctionReturn(0);
 }
@@ -260,15 +227,11 @@ compute_opt(KSP ksp, Mat A, Mat J, void * ctx)
 
   PetscErrorCode ierr;
 
-  // Get the DMDA object
   DM da;
-  ierr = KSPGetDM(ksp, &da);
-  CHKERRQ(ierr);
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);   // Get the DMDA object
 
-  // Get the grid information
   DMDALocalInfo grid;
-  ierr = DMDAGetLocalInfo(da, &grid);
-  CHKERRQ(ierr);
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);   // Get the grid information
 
   /*  A PETSc data structure to store information
       about a single row or column in the stencil */
@@ -397,17 +360,14 @@ compute_opt(KSP ksp, Mat A, Mat J, void * ctx)
       // Insert one row of the matrix A
       ierr = MatSetValuesStencil(A, 1, (const MatStencil *) &idxm, 
                                 (PetscInt) n, (const MatStencil *) &idxn,
-                                (PetscScalar *) v, INSERT_VALUES); 
-      CHKERRQ(ierr);
+                                (PetscScalar *) v, INSERT_VALUES);       CHKERRQ(ierr);
       }
     }
   }
   
   /* Assemble the matrix */
-  ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);
-  CHKERRQ(ierr);
-  ierr = MatAssemblyEnd(A ,MAT_FINAL_ASSEMBLY);
-  CHKERRQ(ierr);
+  ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
+  ierr = MatAssemblyEnd(A ,MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
   
   // PetscViewer viewer;
   // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Amat.m", &viewer);
@@ -429,18 +389,15 @@ test_convergence_rate(KSP ksp, Vec u)
 
   // Get the DMDA object
   DM da;
-  ierr = KSPGetDM(ksp, &da);
-  CHKERRQ(ierr);
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);
 
   // Get the grid information
   DMDALocalInfo grid;
-  ierr = DMDAGetLocalInfo(da, &grid);
-  CHKERRQ(ierr);
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);
 
   // Create a global vector
   Vec u_;
-  ierr = VecDuplicate(u, &u_);
-  CHKERRQ(ierr);
+  ierr = VecDuplicate(u, &u_);   CHKERRQ(ierr);
 
   double *** _u;
 
@@ -449,8 +406,7 @@ test_convergence_rate(KSP ksp, Vec u)
   double hz = (1.f / (double) (grid.mz - 1));
 
   // Get a pointer to the PETSc vector
-  ierr = DMDAVecGetArray(da, u_, &_u);
-  CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, u_, &_u);   CHKERRQ(ierr);
   
   unsigned int k;
   for(k = grid.zs; k < (grid.zs + grid.zm); k++)
@@ -476,19 +432,15 @@ test_convergence_rate(KSP ksp, Vec u)
     }
   }
 
-  ierr = DMDAVecRestoreArray(da, u_, &_u);
-  CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArray(da, u_, &_u);   CHKERRQ(ierr);
 
   double val = 0.f;
 
-  ierr = VecAXPY(u, -1.f, u_);
-  CHKERRQ(ierr);
-  ierr = VecNorm(u, NORM_INFINITY, (PetscScalar *) &val);
-  CHKERRQ(ierr);
+  ierr = VecAXPY(u, -1.f, u_);   CHKERRQ(ierr);
+  ierr = VecNorm(u, NORM_INFINITY, (PetscScalar *) &val);   CHKERRQ(ierr);
 
   ierr = PetscPrintf(PETSC_COMM_WORLD,
-                    "Numerical Error [NORM_INFINITY]: \t %g\n", val);
-  CHKERRQ(ierr);
+                    "Numerical Error [NORM_INFINITY]: \t %g\n", val);   CHKERRQ(ierr);
 
   ierr = VecDestroy(&u_); CHKERRQ(ierr);
 
