@@ -27,4 +27,4 @@
 #echo 3D
 #echo
 
-mpirun -n 4 ./p3D1.out -ksp_type preonly -pc_type ilu -da_refine 1 -ksp_converged_reason -ksp_monitor
+mpirun -n 1 ./p3D1.out -ksp_type preonly -pc_type ilu -ksp_converged_reason -ksp_monitor

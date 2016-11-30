@@ -100,16 +100,42 @@ main(int argc, char * args[])
   ierr = KSPSetFromOptions(ksp);
   CHKERRQ(ierr);
   // Solve the linear system using KSP
+
+  PetscBool flg;
+  for (int ctr = 1; ctr<=2; ctr++)
+  {
+  ierr = VecZeroEntries(u);
+  CHKERRQ(ierr);
+  
+  VecView(b,PETSC_VIEWER_STDOUT_WORLD);
+
   ierr = KSPSolve(ksp, b, u);
   CHKERRQ(ierr);
 
+  // PetscViewer viewer;
+  // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Bvec.m", &viewer);
+  // PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  // VecView(b,viewer);
+  // PetscViewerPopFormat(viewer);
+  // PetscViewerDestroy(&viewer);
 
-  PetscViewer viewer;
-  PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec.m", &viewer);
-  PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-  VecView(u,viewer);
-  PetscViewerPopFormat(viewer);
-  PetscViewerDestroy(&viewer);
+
+  // PetscViewer viewer;
+  // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec.m", &viewer);
+  // PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  // VecView(u,viewer);
+  // PetscViewerPopFormat(viewer);
+  // PetscViewerDestroy(&viewer);
+
+  ierr = VecCopy(u,b);
+  CHKERRQ(ierr);
+
+  // VecEqual(u,b,&flg);
+  // if (flg)
+  // {
+  //   PetscPrintf(PETSC_COMM_WORLD,"Vectors are equal\n");
+  // }
+
 
 
   // Verifies the implementation by comparing the
@@ -118,7 +144,7 @@ main(int argc, char * args[])
   // between the computed solution and the exact solution
   ierr = test_convergence_rate(ksp, u);
   CHKERRQ(ierr);
-
+  }
   /*
     Cleanup the allocations, and exit
   */
