@@ -28,6 +28,12 @@ PetscErrorCode
 compute_opt(KSP, Mat, Mat, void *);
 PetscErrorCode
 test_convergence_rate(KSP, Vec);
+PetscErrorCode
+compute_rhs2(KSP, Vec, void *);
+
+typedef struct {
+  Vec u;
+} ctx_t;
 
 /*
   Main C function
@@ -81,40 +87,53 @@ main(int argc, char * args[])
   */
   KSP ksp;
 
+  ctx_t ctx;
+  ierr = VecDuplicate(u, &ctx.u);
+  CHKERRQ(ierr);
+
   ierr = KSPCreate(comm, &ksp);   CHKERRQ(ierr);   // Create the KPS object
   ierr = KSPSetDM(ksp, (DM) da);   CHKERRQ(ierr);   // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeRHS(ksp, compute_rhs, NULL);   CHKERRQ(ierr);   // Compute the right-hand side vector b
-  ierr = KSPSetComputeOperators(ksp, compute_opt, NULL);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
+   ierr = KSPSetComputeRHS(ksp, compute_rhs, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  ierr = KSPSetComputeOperators(ksp, compute_opt, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
   ierr = KSPSetFromOptions(ksp);   CHKERRQ(ierr);   // KSP options can be changed during the runtime
 
-  // PetscBool flg;
+
   for (int ctr = 1; ctr<=2; ctr++)
   {
   ierr = VecZeroEntries(u);   CHKERRQ(ierr);  // Set all vector values equal to zero
 
+  // VecView(b,PETSC_VIEWER_STDOUT_WORLD);
+  //ierr = KSPSetRhs(ksp, b); CHKERRQ(ierr);
+  
   ierr = KSPSolve(ksp, b, u);   CHKERRQ(ierr);   // Solve the linear system using KSP
 
+  ierr = VecCopy(u, ctx.u);
+  CHKERRQ(ierr);
+
+  ierr = KSPSetComputeRHS(ksp, compute_rhs2, &ctx);   CHKERRQ(ierr); 
   // VecView(b,PETSC_VIEWER_STDOUT_WORLD);
 
+  if (ctr==2){
   PetscViewer viewer;
-  PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec.m", &viewer);
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec2.m", &viewer);
   PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
   VecView(u,viewer);
   PetscViewerPopFormat(viewer);
   PetscViewerDestroy(&viewer);
+  }
+  if (ctr==1){
+  PetscViewer viewer;
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD, "tmp_Uvec1.m", &viewer);
+  PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+  VecView(u,viewer);
+  PetscViewerPopFormat(viewer);
+  PetscViewerDestroy(&viewer);
+  }
+  //ierr = VecCopy(u,b);   CHKERRQ(ierr);   // copy vector u to b
 
-  ierr = VecCopy(u,b);   CHKERRQ(ierr);   // copy vector u to b
   ierr = VecCopy(um2,um3);   CHKERRQ(ierr);   // copy vector um2 to um3
   ierr = VecCopy(um1,um2);   CHKERRQ(ierr);   // copy vector um1 to um2
   ierr = VecCopy(u,um1);   CHKERRQ(ierr);   // copy vector u to um1
-
-  // VecEqual(u,b,&flg);
-  // if (flg)
-  // {
-  //   PetscPrintf(PETSC_COMM_WORLD,"Vectors are equal\n");
-  // }
-
-
 
   // Verifies the implementation by comparing the
   // numerical solution to the analytical solution
@@ -136,6 +155,16 @@ main(int argc, char * args[])
   // Exit the MPI communicator and finalize the PETSc initialization objects
   ierr = PetscFinalize();   CHKERRQ(ierr);
 
+  return 0;
+}
+
+PetscErrorCode
+compute_rhs2(KSP ksp, Vec b, void * ctx) 
+{
+  ctx_t * c = (ctx_t *) ctx;
+
+  int ierr = VecCopy(c->u, b);
+  CHKERRQ(ierr);
   return 0;
 }
 
