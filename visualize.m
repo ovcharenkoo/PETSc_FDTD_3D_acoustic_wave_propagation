@@ -7,11 +7,13 @@
 % % A = fread(fileID);
 % % A = PetscBinaryRead(fileID, 1 ,'PETSC_DOUBLE');
 clear all;
+close all;
 
 for ii = 1:4
-    name = ['tmp_Uvec_' num2str(ii)];
+    name = ['tmp_Bvec_' num2str(ii)];
     run(name);
 
+    %%
     dim = int8(round(abs(max(size(Vec_0x84000004_0))))^(1/3));
     u = reshape(Vec_0x84000004_0, dim, dim, dim);
 
