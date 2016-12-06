@@ -12,7 +12,7 @@
 #SBATCH	--output=%A.res
 #SBATCH	--error=%A.err
 
-# mpirun -n 17 ./ps4.out -ksp_type cg -pc_type mg -da_refine 2 -ksp_converged_reason -ksp_monitor -ksp_view -log_view
+PETSC_MPIRUN=/Users/ovcharoo/Software/petsc-3.7.3/arch-darwin-c-debug/bin/mpirun
 
 #echo
 #echo 1D
@@ -21,10 +21,12 @@
 
 # mpirun -n 4 ./ps_1D.out -ksp_type cg -pc_type mg -da_refine 2 -ksp_converged_reason -ksp_monitor #-log_view
 
-# mpirun -n 4 ./ps_2D.out -ksp_type cg -pc_type mg -da_refine 2 -ksp_converged_reason -ksp_monitor
+#${PETSC_MPIRUN} -n 4 ./p2D.out -ksp_type cg -pc_type mg -da_refine 2 -ksp_converged_reason -ksp_monitor
 
 #echo
 #echo 3D
 #echo
 
-mpirun -n 1 ./p3D1.out -ksp_type preonly -pc_type ilu -ksp_converged_reason -ksp_monitor
+rm tmp_*
+${PETSC_MPIRUN} -n 2 ./p3D1.out -ksp_type cg -pc_type mg -da_refine 2 -ksp_converged_reason
+
