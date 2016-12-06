@@ -93,7 +93,7 @@ main(int argc, char * args[])
 {
   PetscErrorCode ierr; // PETSc error code
   DM da;
-  Vec u,b, *vpux, *vpuy, *vpuz;
+  Vec b, *vpux, *vpuy, *vpuz;
   ctx_t ctx;
 
   ierr = PetscInitialize(&argc, &args, NULL, NULL);   CHKERRQ(ierr);   // Initialize the PETSc database and MPIeo
@@ -140,10 +140,10 @@ main(int argc, char * args[])
   ierr = KSPSetFromOptions(ksp_ux);   CHKERRQ(ierr);   // KSP options can be changed during the runtime
 
 
-  for (int it  = 1; it <= 1; it ++)
+  for (int it  = 1; it <= 4; it ++)
   {
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i \n", it);   CHKERRQ(ierr);
-  ierr = VecZeroEntries(*vpux);   CHKERRQ(ierr);  // Set all vector values equal to zero
+  // ierr = VecZeroEntries(*vpux);   CHKERRQ(ierr);  // Set all vector values equal to zero
   ierr = KSPSolve(ksp_ux, b, *vpux);   CHKERRQ(ierr);   // Solve the linear system using KSP
 
   ierr = VecCopy(ctx.wf.uxm2, ctx.wf.uxm3);   CHKERRQ(ierr);   // copy vector um2 to um3
@@ -157,7 +157,7 @@ main(int argc, char * args[])
   char buffer[32];                                 // The filename buffer.
   snprintf(buffer, sizeof(char) * 32, "tmp_Bvec_%i.m", it);
   // ierr = save_wavefield_to_m_file(*vpux, &buffer); CHKERRQ(ierr);
-  // ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
+  ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
 
   ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
 
@@ -205,9 +205,10 @@ compute_rhs2(KSP ksp, Vec b, void * ctx)
 
   ctx_t *c = (ctx_t *) ctx;
 
+  ierr = PetscPrintf(PETSC_COMM_WORLD,"I AM HERE ! \n"); CHKERRQ(ierr);
   ierr = VecCopy(c->wf.ux, b);   CHKERRQ(ierr);
   // ierr = save_wavefield_to_m_file(c->wf.ux, "wfux.m"); CHKERRQ(ierr);
-    ierr = save_wavefield_to_m_file(b, "wfux.m"); CHKERRQ(ierr);
+    // ierr = save_wavefield_to_m_file(c->wf.ux, "wfux.m"); CHKERRQ(ierr);
   
   PetscFunctionReturn(0);
 }
