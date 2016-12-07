@@ -22,11 +22,11 @@
 #define debprint(expr) printf(#expr " = %g\n", expr)
 
 //User-functions prototypes
-PetscErrorCode compute_rhs(KSP, Vec, void *);
 PetscErrorCode compute_A_ux(KSP, Mat, Mat, void *);
 PetscErrorCode compute_A_uy(KSP, Mat, Mat, void *); 
 PetscErrorCode compute_A_uz(KSP, Mat, Mat, void *);
-PetscErrorCode compute_rhs2(KSP, Vec, void *);
+PetscErrorCode compute_b_ux(KSP, Vec, void *);
+PetscErrorCode update_b_ux(KSP, Vec, void *);
 PetscErrorCode save_wavefield_to_m_file(Vec, void *);
 
 
@@ -65,11 +65,11 @@ typedef struct {
   PetscScalar ymin;
   PetscScalar zmax;
   PetscScalar zmin;
-  Vec c1;
-  Vec c2;
-  Vec c3;
-  Vec c4;
-  Vec c5;
+  Vec c11;
+  Vec c12;
+  Vec c13;
+  Vec c44;
+  Vec c66;
   Vec rho;
 } model_par;
 
@@ -96,10 +96,18 @@ main(int argc, char * args[])
   */
   PetscErrorCode ierr; // PETSc error code
   DM da;
+
   Vec b, *pux, *puy, *puz;
-  Vec *pc1, *pc2, *pc3, *pc4, *pc5, *prho;
+  Vec *puxm1, *puym1, *puzm1;
+  Vec *puxm2, *puym2, *puzm2;
+  Vec *puxm3, *puym3, *puzm3;
+
+  Vec *pc11, *pc12, *pc13, *pc44, *pc66, *prho;
+
   PetscScalar *pdx, *pdy, *pdz, *pxmax, *pymax, *pzmax;
+
   PetscInt *pnx, *pny, *pnz;
+
   ctx_t ctx, *pctx;
   int tmp;
 
@@ -113,6 +121,18 @@ main(int argc, char * args[])
   puy = &ctx.wf.uy;
   puz = &ctx.wf.uz;
 
+  puxm1 = &ctx.wf.uxm1;
+  puym1 = &ctx.wf.uym1;
+  puzm1 = &ctx.wf.uzm1;
+
+  puxm2 = &ctx.wf.uxm2;
+  puym2 = &ctx.wf.uym2;
+  puzm2 = &ctx.wf.uzm2;
+
+  puxm3 = &ctx.wf.uxm3;
+  puym3 = &ctx.wf.uym3;
+  puzm3 = &ctx.wf.uzm3;
+
   pnx = &ctx.model.nx;
   pny = &ctx.model.ny;
   pnz = &ctx.model.nz;
@@ -125,11 +145,11 @@ main(int argc, char * args[])
   pymax = &ctx.model.ymax;
   pzmax = &ctx.model.zmax;
   
-  pc1 = &ctx.model.c1;
-  pc2 = &ctx.model.c2;
-  pc3 = &ctx.model.c3;
-  pc4 = &ctx.model.c4;
-  pc5 = &ctx.model.c5;
+  pc11 = &ctx.model.c11;
+  pc12 = &ctx.model.c12;
+  pc13 = &ctx.model.c13;
+  pc44 = &ctx.model.c44;
+  pc66 = &ctx.model.c66;
   prho = &ctx.model.rho;
 
 
@@ -154,22 +174,22 @@ main(int argc, char * args[])
 
   ierr = VecDuplicate(*pux, &b);   CHKERRQ(ierr);          // RHS of the system
 
-  ierr = VecDuplicate(*pux, pc1);   CHKERRQ(ierr);      // Duplicate vectors from grid object to each vector component
-  ierr = VecDuplicate(*pux, pc2);   CHKERRQ(ierr);
-  ierr = VecDuplicate(*pux, pc3);   CHKERRQ(ierr);
-  ierr = VecDuplicate(*pux, pc4);   CHKERRQ(ierr);
-  ierr = VecDuplicate(*pux, pc5);   CHKERRQ(ierr);
+  ierr = VecDuplicate(*pux, pc11);   CHKERRQ(ierr);         // Duplicate vectors from grid object to each vector component
+  ierr = VecDuplicate(*pux, pc12);   CHKERRQ(ierr);
+  ierr = VecDuplicate(*pux, pc13);   CHKERRQ(ierr);
+  ierr = VecDuplicate(*pux, pc44);   CHKERRQ(ierr);
+  ierr = VecDuplicate(*pux, pc66);   CHKERRQ(ierr);
   ierr = VecDuplicate(*pux, prho);   CHKERRQ(ierr); 
 
-  ierr = VecDuplicate(*pux, &ctx.wf.uxm1); CHKERRQ(ierr);  // ux at time n-1
-  ierr = VecDuplicate(*pux, &ctx.wf.uxm2); CHKERRQ(ierr);  // ux at time n-2
-  ierr = VecDuplicate(*pux, &ctx.wf.uxm3); CHKERRQ(ierr);  // ux at time n-3 
-  ierr = VecDuplicate(*puy, &ctx.wf.uym1); CHKERRQ(ierr);  // uy at time n-1
-  ierr = VecDuplicate(*puy, &ctx.wf.uym2); CHKERRQ(ierr);  // uy at time n-2
-  ierr = VecDuplicate(*puy, &ctx.wf.uym3); CHKERRQ(ierr);  // uy at time n-3 
-  ierr = VecDuplicate(*puz, &ctx.wf.uzm1); CHKERRQ(ierr);  // uz at time n-1
-  ierr = VecDuplicate(*puz, &ctx.wf.uzm2); CHKERRQ(ierr);  // uz at time n-2
-  ierr = VecDuplicate(*puz, &ctx.wf.uzm3); CHKERRQ(ierr);  // uz at time n-3 
+  ierr = VecDuplicate(*pux, puxm1); CHKERRQ(ierr);  // ux at time n-1
+  ierr = VecDuplicate(*pux, puxm2); CHKERRQ(ierr);  // ux at time n-2
+  ierr = VecDuplicate(*pux, puxm3); CHKERRQ(ierr);  // ux at time n-3 
+  ierr = VecDuplicate(*puy, puym1); CHKERRQ(ierr);  // uy at time n-1
+  ierr = VecDuplicate(*puy, puym2); CHKERRQ(ierr);  // uy at time n-2
+  ierr = VecDuplicate(*puy, puym3); CHKERRQ(ierr);  // uy at time n-3 
+  ierr = VecDuplicate(*puz, puzm1); CHKERRQ(ierr);  // uz at time n-1
+  ierr = VecDuplicate(*puz, puzm2); CHKERRQ(ierr);  // uz at time n-2
+  ierr = VecDuplicate(*puz, puzm3); CHKERRQ(ierr);  // uz at time n-3 
 
 
   /*
@@ -192,68 +212,81 @@ main(int argc, char * args[])
   *pymax = *pdy * (*pny - 1);
   *pzmax = *pdz * (*pnz - 1);
 
-  ierr = VecSet(*pc1, 1.f); CHKERRQ(ierr);      // Fill elastic properties vectors
-  ierr = VecSet(*pc2, 1.f); CHKERRQ(ierr);
-  ierr = VecSet(*pc3, 1.f); CHKERRQ(ierr);
-  ierr = VecSet(*pc4, 1.f); CHKERRQ(ierr);
-  ierr = VecSet(*pc5, 1.f); CHKERRQ(ierr);
+  ierr = VecSet(*pc11, 1.f); CHKERRQ(ierr);      // Fill elastic properties vectors
+  ierr = VecSet(*pc12, 1.f); CHKERRQ(ierr);
+  ierr = VecSet(*pc13, 1.f); CHKERRQ(ierr);
+  ierr = VecSet(*pc44, 1.f); CHKERRQ(ierr);
+  ierr = VecSet(*pc66, 1.f); CHKERRQ(ierr);
   ierr = VecSet(*prho, 1.f); CHKERRQ(ierr);
 
   // PetscPrintf(PETSC_COMM_WORLD,"%g \n",pctx->model.dx);
 
-  /* 
-    Krylov Subspace (KSP) object to solve the linear system
+  /*
+    CREATE KSP, KRYLOV SUBSPACE OBJECTS
   */
   KSP ksp_ux, ksp_uy, ksp_uz;
 
   // Create Krylov solver for ux component
-  ierr = KSPCreate(comm, &ksp_ux);   CHKERRQ(ierr);   // Create the KPS object
-  ierr = KSPSetDM(ksp_ux, (DM) da);   CHKERRQ(ierr);   // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeRHS(ksp_ux, compute_rhs, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  ierr = KSPCreate(comm, &ksp_ux);   CHKERRQ(ierr);                       // Create the KPS object
+  ierr = KSPSetDM(ksp_ux, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
+  ierr = KSPSetComputeRHS(ksp_ux, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
   ierr = KSPSetComputeOperators(ksp_ux, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
-  ierr = KSPSetFromOptions(ksp_ux);   CHKERRQ(ierr);   // KSP options can be changed during the runtime
+  ierr = KSPSetFromOptions(ksp_ux);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
   // Create Krylov solver for uy component
-  ierr = KSPCreate(comm, &ksp_uy);   CHKERRQ(ierr);   // Create the KPS object
-  ierr = KSPSetDM(ksp_uy, (DM) da);   CHKERRQ(ierr);   // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeRHS(ksp_uy, compute_rhs, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  ierr = KSPCreate(comm, &ksp_uy);   CHKERRQ(ierr);                       // Create the KPS object
+  ierr = KSPSetDM(ksp_uy, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
+  ierr = KSPSetComputeRHS(ksp_uy, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
   ierr = KSPSetComputeOperators(ksp_uy, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
-  ierr = KSPSetFromOptions(ksp_uy);   CHKERRQ(ierr);   // KSP options can be changed during the runtime
+  ierr = KSPSetFromOptions(ksp_uy);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
   // Create Krylov solver for uz component
-  ierr = KSPCreate(comm, &ksp_uz);   CHKERRQ(ierr);   // Create the KPS object
-  ierr = KSPSetDM(ksp_uz, (DM) da);   CHKERRQ(ierr);   // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeRHS(ksp_uz, compute_rhs, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  ierr = KSPCreate(comm, &ksp_uz);   CHKERRQ(ierr);                       // Create the KPS object
+  ierr = KSPSetDM(ksp_uz, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
+  ierr = KSPSetComputeRHS(ksp_uz, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
   ierr = KSPSetComputeOperators(ksp_uz, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
-  ierr = KSPSetFromOptions(ksp_uz);   CHKERRQ(ierr);   // KSP options can be changed during the runtime
+  ierr = KSPSetFromOptions(ksp_uz);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
+
+
+
+
+
+
+  /*
+    TIME LOOP
+  */
   for (int it  = 1; it <= 4; it ++)
   {
     ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i \n", it);   CHKERRQ(ierr);
+
     // ierr = VecZeroEntries(*pux);   CHKERRQ(ierr);  // Set all vector values equal to zero
-    ierr = KSPSolve(ksp_ux, b, *pux);   CHKERRQ(ierr);   // Solve the linear system using KSP
-
-    ierr = VecCopy(ctx.wf.uxm2, ctx.wf.uxm3);   CHKERRQ(ierr);   // copy vector um2 to um3
-    ierr = VecCopy(ctx.wf.uxm1, ctx.wf.uxm2);   CHKERRQ(ierr);   // copy vector um1 to um2
-    ierr = VecCopy(*pux, ctx.wf.uxm1);   CHKERRQ(ierr);   // copy vector u to um1
-
-    ierr = KSPSetComputeRHS(ksp_ux, compute_rhs2, &ctx);   CHKERRQ(ierr); // new rhs for next iteration
     
-    // save_wavefield_to_m_file(ctx.wf.uxm1, "wfux.m");
+    ierr = KSPSolve(ksp_ux, b, *pux);   CHKERRQ(ierr);  // Solve the linear system using KSP
 
-    char buffer[32];                                 // The filename buffer.
-    snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
+    ierr = VecCopy(*puxm2, *puxm3);   CHKERRQ(ierr);    // copy vector um2 to um3
+    ierr = VecCopy(*puxm1, *puxm2);   CHKERRQ(ierr);    // copy vector um1 to um2
+    ierr = VecCopy(*pux, *puxm1);   CHKERRQ(ierr);      // copy vector u to um1
+
+    ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr); // new rhs for next iteration
+
+    // char buffer[32];                                 // The filename buffer.
+    // snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
     // ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
-    ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
+    // ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
+
 
     ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
 
   }
+
+
+
+
+
   /*
-    Cleanup the allocations, and exit
+    CLEAN ALLOCATIONS AND EXIT
   */
-  // ierr = VecDestroy(&pux);   CHKERRQ(ierr);
-  // ierr = VecDestroy(&ctx);   CHKERRQ(ierr);
 
   ierr = VecDestroy(&b);   CHKERRQ(ierr);
   ierr = KSPDestroy(&ksp_ux);   CHKERRQ(ierr);
@@ -261,13 +294,14 @@ main(int argc, char * args[])
   ierr = KSPDestroy(&ksp_uz);   CHKERRQ(ierr);
   ierr = DMDestroy(&da);   CHKERRQ(ierr);
 
-  // Exit the MPI communicator and finalize the PETSc initialization objects
   ierr = PetscFinalize();   CHKERRQ(ierr);
 
   return 0;
 }
 
 
+
+// SAVE VECTOR TO .m FILE
 PetscErrorCode
 save_wavefield_to_m_file(Vec u, void * filename)
 {
@@ -286,9 +320,9 @@ save_wavefield_to_m_file(Vec u, void * filename)
 }
 
 
-
+// UPDATE RHS OF UX EQUATION
 PetscErrorCode
-compute_rhs2(KSP ksp, Vec b, void * ctx) 
+update_b_ux(KSP ksp, Vec b, void * ctx) 
 {
   PetscErrorCode ierr;
 
@@ -303,11 +337,9 @@ compute_rhs2(KSP ksp, Vec b, void * ctx)
 
 
 
-/*
-  Compute the right-hand side vector
-*/
+// COMPUTE INITIAL RHS OF UX EQUATION
 PetscErrorCode
-compute_rhs(KSP ksp, Vec b, void * ctx) 
+compute_b_ux(KSP ksp, Vec b, void * ctx) 
 {
   PetscFunctionBegin;
 
@@ -394,7 +426,11 @@ compute_rhs(KSP ksp, Vec b, void * ctx)
   PetscFunctionReturn(0);
 }
 
-/* Compute the operator matrix A */
+
+
+
+
+// COMPUTE OPERATOR A FOR UX EQUATION
 PetscErrorCode 
 compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
 {
