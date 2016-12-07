@@ -144,7 +144,8 @@ main(int argc, char * args[])
   for (int it  = 1; it <= 4; it ++)
   {
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i \n", it);   CHKERRQ(ierr);
-  ierr = VecZeroEntries(u);   CHKERRQ(ierr);  // Set all vector values equal to zero
+  ierr = VecZeroEntries(*vpux);   CHKERRQ(ierr);  // Set all vector values equal to zero
+
   ierr = KSPSolve(ksp, b, u);   CHKERRQ(ierr);   // Solve the linear system using KSP
   
   ierr = VecCopy(u, ctx.wf.u);   CHKERRQ(ierr);
