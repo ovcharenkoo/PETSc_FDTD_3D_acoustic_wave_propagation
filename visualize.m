@@ -9,7 +9,7 @@
 clear all;
 close all;
 
-for ii = 1:5
+for ii = 2:2
     name = ['tmp_Bvec_' num2str(ii)];
     run(name);
 
