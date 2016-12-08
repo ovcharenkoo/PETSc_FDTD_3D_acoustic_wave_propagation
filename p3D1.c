@@ -19,7 +19,8 @@
 #include <petscdmda.h>
 #include <petscksp.h>
 
-#define debprint(expr) printf(#expr " = %g\n", expr)
+/*#define debprint(expr) printf(#expr " = %f\n", expr)*/
+#define debprint(expr) PetscPrintf(PETSC_COMM_WORLD, #expr " = %g \n", expr);
 
 //User-functions prototypes
 PetscErrorCode compute_A_ux(KSP, Mat, Mat, void *);
@@ -73,10 +74,18 @@ typedef struct {
   Vec rho;
 } model_par;
 
+typedef struct{
+  PetscScalar dt;
+  PetscScalar t0;
+  PetscInt nt;
+  PetscScalar tf;
+} time_par;
+
 // User context to use with PETSc functions
 typedef struct {
   wfield wf;
   model_par model;
+  time_par time;
 } ctx_t;
 
 
@@ -106,7 +115,7 @@ main(int argc, char * args[])
 
   PetscScalar *pdx, *pdy, *pdz, *pxmax, *pymax, *pzmax;
 
-  PetscInt *pnx, *pny, *pnz;
+  PetscInt *pnx, *pny, *pnz, *pnt;
 
   ctx_t ctx, *pctx;
   int tmp;
@@ -151,6 +160,8 @@ main(int argc, char * args[])
   pc44 = &ctx.model.c44;
   pc66 = &ctx.model.c66;
   prho = &ctx.model.rho;
+
+  pnt = &ctx.time.nt;
 
 
 
@@ -197,16 +208,9 @@ main(int argc, char * args[])
   */
   ierr = DMDAGetInfo(da,0,pnx, pny, pnz, 0,0,0,&tmp,0,0,0,0,0);  CHKERRQ(ierr); // Get NX, Ny, NZ
 
-  // ierr = DMDAGetCorners(da, &pctx->model.xmin, 
-  //                           &pctx->model.ymin, 
-  //                           &pctx->model.zmin,
-  //                           &pctx->model.xmax,
-  //                           &pctx->model.ymax, 
-  //                           &pctx->model.zmax);  CHKERRQ(ierr);
-
-  *pdx = 10.f;      // Set grid step, dx, dy, dz
-  *pdy = 10.f;
-  *pdz = 10.f;
+  *pdx = 1.f;      // Set grid step, dx, dy, dz
+  *pdy = 1.f;
+  *pdz = 1.f;
 
   *pxmax = *pdx * (*pnx - 1);   // Max values over OX, OY, OZ
   *pymax = *pdy * (*pny - 1);
@@ -222,8 +226,17 @@ main(int argc, char * args[])
   // PetscPrintf(PETSC_COMM_WORLD,"%g \n",pctx->model.dx);
 
   /*
-    CREATE KSP, KRYLOV SUBSPACE OBJECTS
+    SET  TIME STEPPING PATRAMETERS
   */
+  ctx.time.dt = 0.1;
+  ctx.time.t0 = 0.0;
+  ctx.time.nt = 5;
+
+
+  /*  
+    CREATE KSP, KRYLOV SUBSPACE OBJECTS 
+  */
+
   KSP ksp_ux, ksp_uy, ksp_uz;
 
   // Create Krylov solver for ux component
@@ -256,11 +269,9 @@ main(int argc, char * args[])
   /*
     TIME LOOP
   */
-  for (int it  = 1; it <= 4; it ++)
+  for (int it  = 1; it <= *pnt; it ++)
   {
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i \n", it);   CHKERRQ(ierr);
-
-    // ierr = VecZeroEntries(*pux);   CHKERRQ(ierr);  // Set all vector values equal to zero
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", it, ctx.time.nt);   CHKERRQ(ierr);
     
     ierr = KSPSolve(ksp_ux, b, *pux);   CHKERRQ(ierr);  // Solve the linear system using KSP
 
@@ -270,14 +281,12 @@ main(int argc, char * args[])
 
     ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr); // new rhs for next iteration
 
-    // char buffer[32];                                 // The filename buffer.
-    // snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
-    // ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
-    // ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
-
+    char buffer[32];                                 // The filename buffer.
+    snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
+    ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
+    // ierr = save_wavefield_to_m_file(*pc11, &buffer); CHKERRQ(ierr);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
-
   }
 
 
@@ -305,6 +314,7 @@ main(int argc, char * args[])
 PetscErrorCode
 save_wavefield_to_m_file(Vec u, void * filename)
 {
+  PetscFunctionBegin;
   PetscErrorCode ierr;
   char * filename2 = (char *) filename;
 
@@ -324,13 +334,74 @@ save_wavefield_to_m_file(Vec u, void * filename)
 PetscErrorCode
 update_b_ux(KSP ksp, Vec b, void * ctx) 
 {
+  PetscFunctionBegin;
   PetscErrorCode ierr;
 
   ctx_t *c = (ctx_t *) ctx;
 
-  ierr = VecCopy(c->wf.ux, b);   CHKERRQ(ierr);
-  // ierr = save_wavefield_to_m_file(c->wf.ux, "wfux.m"); CHKERRQ(ierr);
-    // ierr = save_wavefield_to_m_file(c->wf.ux, "wfux.m"); CHKERRQ(ierr);
+  // ierr = VecCopy(c->wf.ux, b);   CHKERRQ(ierr);
+/* Get the DM oject of the KSP */
+  DM da;
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);
+
+  /* Get the global information of the DM grid*/
+  DMDALocalInfo grid;
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);
+
+  /* Grid spacing */
+  double hx = (1.f / (double) (grid.mx - 1));
+  double hy = (1.f / (double) (grid.my - 1));
+  double hz = (1.f / (double) (grid.mz - 1));
+
+  /*  A pointer to access b, the right-hand side PETSc vector
+      viewed as a C array */
+  
+  double *** _b;
+  double *** _uxm1, ***_uxm2, ***_uxm3;
+
+  ierr = DMDAVecGetArray(da, b, &_b);   CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, c->wf.uxm1, &_uxm1);   CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, c->wf.uxm2, &_uxm2);   CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);
+
+  /*
+    Loop over the grid points, and fill b 
+  */
+  unsigned int k;
+  for(k = grid.zs; k < (grid.zs + grid.zm); k++) // Depth
+  {
+    unsigned int j;
+    for(j = grid.ys; j < (grid.ys + grid.ym); j++) // Columns
+    {
+      unsigned int i;
+      for(i = grid.xs; i < (grid.xs + grid.xm); i++) // Rows
+      {
+        /* Nodes on the boundary layers (\Gamma) */
+        if((i == 0) || (i == (grid.mx - 1)) ||
+          (j == 0) || (j == (grid.my - 1)) ||
+          (k == 0) || (k == (grid.mz - 1)))
+        {
+          _b[k][j][i] = 0.f;
+        }
+        /* Interior nodes in the domain (\Omega) */
+        else 
+        { 
+          double f = hx * hy * hz; // Scaling
+          
+          f*= 2.5f * _uxm1[k][j][i] - 2.f * _uxm2[k][j][i] + 0.5f * _uxm3[k][j][i];
+
+          _b[k][j][i] = f;
+        }
+      }
+    }
+  }
+
+  ierr = DMDAVecRestoreArray(da, b, &_b);   CHKERRQ(ierr);   // Release the resource
+
+  MatNullSpace   nullspace;
+  MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
+  MatNullSpaceRemove(nullspace,b);
+  MatNullSpaceDestroy(&nullspace);
   
   PetscFunctionReturn(0);
 }
@@ -342,8 +413,18 @@ PetscErrorCode
 compute_b_ux(KSP ksp, Vec b, void * ctx) 
 {
   PetscFunctionBegin;
-
   PetscErrorCode ierr;
+  ctx_t *c = (ctx_t *) ctx;
+  PetscInt midnx, midny, midnz;
+  PetscScalar dt;
+
+  dt = c->time.dt;
+  
+  midnx = (int) (c->model.nx / 2); 
+  midny = (int) (c->model.ny / 2); 
+  midnz = (int) (c->model.nz / 2); 
+  
+  // ierr = PetscPrintf(PETSC_COMM_WORLD, "%i\n",midnx); CHKERRQ(ierr);
 
   /* Get the DM oject of the KSP */
   DM da;
@@ -361,54 +442,32 @@ compute_b_ux(KSP ksp, Vec b, void * ctx)
   /*  A pointer to access b, the right-hand side PETSc vector
       viewed as a C array */
   double *** _b;
+  double *** _rho;
   ierr = DMDAVecGetArray(da, b, &_b);   CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, c->model.rho, &_rho);   CHKERRQ(ierr);
 
-  /*
-    Loop over the grid points, and fill b 
-  */
   unsigned int k;
   for(k = grid.zs; k < (grid.zs + grid.zm); k++) // Depth
   {
-    // double z = k * hz; // Z
-
     unsigned int j;
     for(j = grid.ys; j < (grid.ys + grid.ym); j++) // Columns
     {
-      // double y = j * hy; // Y
-
       unsigned int i;
       for(i = grid.xs; i < (grid.xs + grid.xm); i++) // Rows
       {
-        // double x = i * hx; // X
-
-        /* Nodes on the boundary layers (\Gamma) */
         if((i == 0) || (i == (grid.mx - 1)) ||
           (j == 0) || (j == (grid.my - 1)) ||
-          (k == 0) || (k == (grid.mz - 1)))
+          (k == 0) || (k == (grid.mz - 1)))         /* Nodes on the boundary layers (\Gamma) */
         {
           _b[k][j][i] = 0.f;
         }
-        /* Interior nodes in the domain (\Omega) */
-        else 
-        { 
-          // double x2 = x * x; // x^2
-          // double y2 = y * y; // y^2
-          // double z2 = z * z; // y^2
-          // double x4 = x2 * x2;
-          // double y4 = y2 * y2;
-          // double z4 = z2 * z2;
+        else                                        /* Interior nodes in the domain (\Omega) */
+        {  
+          double f = dt * dt * hx * hy * hz / (2.f * _rho[k][j][i]); // Scaling
 
-          // debprint(z4); 
-
-          double f = hx * hy * hz; // Scaling
-
-          // f *=  2.f * (-y2 * (-1.f + y2) * z2 * (-1.f + z2)  + 
-          //       x4 * (z2 - z4 + y4 * (-1.f + 6.f * z2) + y2 * (1.f - 12.f * z2 + 6.f * z4)) + 
-          //       x2 * (z2 * (-1.f + z2) + y2 * (-1.f + 18.f * z2 - 12.f * z4) + y4 * (1.f - 12.f * z2 + 6.f * z4)));
-
-          if ((i>=6) && (i<=8) && (j>=6) && (j<=8) && (k>=6) && (k<=8))
+          if ((i>=midnx) && (i<=midnx+1) && (j>=midny) && (j<=midny+1) && (k>=midnz) && (k<=midnz+1))
           {
-            f *= 5.f;
+            f *= 1.f;
           }
           else
           {
@@ -416,12 +475,18 @@ compute_b_ux(KSP ksp, Vec b, void * ctx)
           }
 
           _b[k][j][i] = f;
+
         }
       }
     }
   }
 
   ierr = DMDAVecRestoreArray(da, b, &_b);   CHKERRQ(ierr);   // Release the resource
+
+  MatNullSpace   nullspace;
+  MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
+  MatNullSpaceRemove(nullspace,b);
+  MatNullSpaceDestroy(&nullspace);
 
   PetscFunctionReturn(0);
 }
@@ -430,6 +495,11 @@ compute_b_ux(KSP ksp, Vec b, void * ctx)
 
 
 
+/*=========================================================================================
+ Using example 34 from
+ http://www.mcs.anl.gov/petsc/petsc-current/src/ksp/ksp/examples/tutorials/ex34.c.html \
+  =========================================================================================*/
+
 // COMPUTE OPERATOR A FOR UX EQUATION
 PetscErrorCode 
 compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
@@ -437,31 +507,32 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   PetscFunctionBegin;
 
   PetscErrorCode ierr;
-
+  PetscScalar v[7], hx, hy, hz, hyhzdhx, hxhzdhy, hxhydhz;
+  PetscScalar dt, dt2_2;
+  PetscScalar ***_rho, ***_c11;
+  PetscInt num, n;
+  PetscInt numi, numj, numk;
   DM da;
+  DMDALocalInfo grid;
+  MatStencil idxm;   /*  A PETSc data structure to store information about a single row or column in the stencil */
+  MatStencil idxn[7];
+  
+  ctx_t *c = (ctx_t *) ctx;
+
   ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);   // Get the DMDA object
 
-  DMDALocalInfo grid;
+  // ierr = DMDAVecGetArray(da, c->model.c11, &_c11);   CHKERRQ(ierr);
+  // ierr = DMDAVecGetArray(da, c->model.rho, &_rho);   CHKERRQ(ierr);
+  
+  dt = c->time.dt;
+  dt2_2 = dt * dt / 2.f;
+
   ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);   // Get the grid information
-
-  /*  A PETSc data structure to store information
-      about a single row or column in the stencil */
-  MatStencil idxm;
-  MatStencil idxn[7];
-
-/*=========================================================================================
- Using example 34 from
- http://www.mcs.anl.gov/petsc/petsc-current/src/ksp/ksp/examples/tutorials/ex34.c.html \
-  =========================================================================================*/
-
-  // The matrix values
-  PetscScalar v[7], hx, hy, hz, hyhzdhx, hxhzdhy, hxhydhz;
-  PetscInt n;
-
 
   hx = (1.f / (double) (grid.mx - 1));
   hy = (1.f / (double) (grid.my - 1));
   hz = (1.f / (double) (grid.mz - 1));
+
   hyhzdhx = hy * hz / hx;
   hxhzdhy = hx * hz / hy;
   hxhydhz = hx * hy / hz;
@@ -476,6 +547,110 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
       unsigned int i;
       for(i = grid.xs; i < (grid.xs + grid.xm); i++)  // Rows
       { 
+        
+        /* 
+        // _rho[i][j][k] = 1.f;
+        idxm.k = k;
+        idxm.j = j;
+        idxm.i = i;
+        
+        idxn[0].k = k;
+        idxn[0].j = j;
+        idxn[0].i = i;
+
+        // Nodes on the boundary layers (\Gamma)
+        if((i == 0) || (i == (grid.mx - 1)) ||
+          (j == 0) || (j == (grid.my - 1)) ||
+          (k == 0) || (k == (grid.mz - 1)))
+        {
+          num = 0; numi=0; numj=0; numk=0;
+          if (k!=0) {
+              v[num]     = - hxhydhz;
+              // v[num] = 1;
+              idxn[num].i = i;
+              idxn[num].j = j;
+              idxn[num].k = k-1;
+              num++; numk++;
+            }
+            if (j!=0) {
+              v[num]     = - hxhzdhy;
+              // v[num] = 1;
+              idxn[num].i = i;
+              idxn[num].j = j-1;
+              idxn[num].k = k;
+              num++; numj++;
+              }
+            if (i!=0) {
+              v[num]     = - hyhzdhx;
+              // v[num] = 1;
+              idxn[num].i = i-1;
+              idxn[num].j = j;
+              idxn[num].k = k;
+              num++; numi++;
+            }
+            if (i!=grid.mx-1) {
+              v[num]     = - hyhzdhx;
+              // v[num] = 1;
+              idxn[num].i = i+1;
+              idxn[num].j = j;
+              idxn[num].k = k;
+              num++; numi++;
+            }
+            if (j!=grid.my-1) {
+              v[num]     = - hxhzdhy;
+              // v[num] = 1;
+              idxn[num].i = i;
+              idxn[num].j = j+1;
+              idxn[num].k = k;
+              num++; numj++;
+            }
+            if (k!=grid.mz-1) {
+              v[num]     = - hxhydhz;
+              // v[num] = 1;
+              idxn[num].i = i;
+              idxn[num].j = j;
+              idxn[num].k = k+1;
+              num++; numk++;
+            }
+            v[num] = ((PetscReal)(numk)*hxhydhz + (PetscReal)(numj)*hxhzdhy + (PetscReal)(numi)*hyhzdhx);
+            
+            idxn[num].i = i;
+            idxn[num].j = j;   
+            idxn[num].k = k;
+            
+
+            for(int ii=0;ii<6;ii++)
+            {
+              v[ii]*= -dt*dt / (2.0 * 1.f);
+            }
+            v[3]+=hx * hy * hz;
+
+            num++;
+            ierr = MatSetValuesStencil(A,1,(const MatStencil *) &idxm, (Petsc64bitInt) num, (const MatStencil *) &idxn,(PetscScalar *) v, INSERT_VALUES);    
+            CHKERRQ(ierr); 
+        }
+        //Interior nodes in the domain (\Omega)
+        else 
+        {
+           v[0] = -hxhydhz;                            idxn[0].i = i;   idxn[0].j = j;   idxn[0].k = k-1;
+           v[1] = -hxhzdhy;                            idxn[1].i = i;   idxn[1].j = j-1; idxn[1].k = k;
+           v[2] = -hyhzdhx;                            idxn[2].i = i-1; idxn[2].j = j;   idxn[2].k = k;
+           v[3] = 2.f*(hyhzdhx + hxhzdhy + hxhydhz); idxn[3].i = i;   idxn[3].j = j;   idxn[3].k = k;
+           v[4] = -hyhzdhx;                            idxn[4].i = i+1; idxn[4].j = j;   idxn[4].k = k;
+           v[5] = -hxhzdhy;                            idxn[5].i = i;   idxn[5].j = j+1; idxn[5].k = k;
+           v[6] = -hxhydhz;                            idxn[6].i = i;   idxn[6].j = j;   idxn[6].k = k+1;
+
+
+            for(int ii=0;ii<6;ii++)
+            {
+              v[ii]*= -dt*dt / (2.0 * 1.f);
+            }
+            v[3]+=hx * hy * hz;
+
+           ierr = MatSetValuesStencil(A,1,(const MatStencil *) &idxm, (Petsc64bitInt) 7, (const MatStencil *) &idxn,(PetscScalar *) v, INSERT_VALUES);
+           CHKERRQ(ierr);  
+        }
+        */
         n = 1;
         idxm.k = k;
         idxm.j = j;
@@ -495,7 +670,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
         /* Interior nodes in the domain (\Omega) */
         else 
         {
-          v[0] = 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
+          v[0] = dt2_2 * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
         // If neighbor is not a known boundary value
         // then we put an entry
 
@@ -506,7 +681,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i - 1;
           idxn[n].k = k;
 
-          v[n] = - hyhzdhx; // Fill with the value
+          v[n] = - dt2_2 * hyhzdhx; // Fill with the value
           
           n++; // One column added
         }
@@ -517,7 +692,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i + 1;
           idxn[n].k = k;
 
-          v[n] = - hyhzdhx;  // Fill with the value
+          v[n] = - dt2_2 * hyhzdhx;  // Fill with the value
 
           n++; // One column added
         }
@@ -528,7 +703,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - hxhzdhy; // Fill with the value
+          v[n] = - dt2_2 * hxhzdhy; // Fill with the value
   
           n++; // One column added
         }
@@ -539,7 +714,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - hxhzdhy; // Fill with the value
+          v[n] = - dt2_2 * hxhzdhy; // Fill with the value
 
           n++; // One column added
         }
@@ -551,7 +726,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k - 1;
 
-          v[n] = - hxhydhz; // Fill with the value
+          v[n] = - dt2_2 * hxhydhz; // Fill with the value
 
           n++; // One column added
         }
@@ -563,11 +738,20 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k + 1;
 
-          v[n] = - hxhydhz; // Fill with the value
+          v[n] = - dt2_2 * hxhydhz; // Fill with the value
 
           n++; // One column added
         }
+      
+        // for(int ii=0;ii<6;ii++)
+        // {
+        //   v[ii]*= dt*dt / (2.0 * 1.f);
+        // }
+        v[0]+= hx * hy * hz;
       }
+      
+
+
       // Insert one row of the matrix A
       ierr = MatSetValuesStencil(A, 1, (const MatStencil *) &idxm, 
                                 (PetscInt) n, (const MatStencil *) &idxn,
@@ -579,13 +763,9 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   /* Assemble the matrix */
   ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
   ierr = MatAssemblyEnd(A ,MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
-  
-  // PetscViewer viewer;
-  // PetscViewerASCIIOpen(PETSC_COMM_WORLD, "Amat.m", &viewer);
-  // PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
-  // MatView(A,viewer);
-  // PetscViewerPopFormat(viewer);
-  // PetscViewerDestroy(&viewer);
+
+  // ierr = DMDAVecRestoreArray(da, c->model.c11, &_c11);   CHKERRQ(ierr);   // Release the resource
+  // ierr = DMDAVecRestoreArray(da, c->model.rho, &_rho);   CHKERRQ(ierr);   // Release the resource
 
   PetscFunctionReturn(0);
 }

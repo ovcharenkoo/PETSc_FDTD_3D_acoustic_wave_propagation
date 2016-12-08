@@ -9,7 +9,7 @@
 clear all;
 close all;
 
-for ii = 1:4
+for ii = 1:5
     name = ['tmp_Bvec_' num2str(ii)];
     run(name);
 
@@ -34,7 +34,7 @@ for ii = 1:4
     kk = 0.01;
     clf; patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha','flat','FaceVertexAlphaData',double(C > kk * max(C)));
     % patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha',0.5);
-    axis equal; view(3); axis tight; axis vis3d; grid off; colorbar;
+    axis equal; view(3); axis tight; axis vis3d; grid off; colorbar; title(num2str(ii));
 
     %%
 
