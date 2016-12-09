@@ -18,9 +18,12 @@
 #include <stdio.h>
 #include <petscdmda.h>
 #include <petscksp.h>
+#include <math.h>
 
-/*#define debprint(expr) printf(#expr " = %f\n", expr)*/
-#define debprint(expr) PetscPrintf(PETSC_COMM_WORLD, #expr " = %g \n", expr);
+/*#define debprint(expr) printmax(#expr " = %f\n", expr)*/
+#define debprint(expr) PetscPrintf(PETSC_COMM_WORLD, #expr " = %f \n", expr);
+#define PI 3.1415926535
+#define DEGREES_TO_RADIANS PI/180.f
 
 //User-functions prototypes
 PetscErrorCode compute_A_ux(KSP, Mat, Mat, void *);
@@ -29,6 +32,7 @@ PetscErrorCode compute_A_uz(KSP, Mat, Mat, void *);
 PetscErrorCode compute_b_ux(KSP, Vec, void *);
 PetscErrorCode update_b_ux(KSP, Vec, void *);
 PetscErrorCode save_wavefield_to_m_file(Vec, void *);
+PetscErrorCode source_term(void *);
 
 
 // User-defined structures
@@ -77,15 +81,22 @@ typedef struct {
 typedef struct{
   PetscScalar dt;
   PetscScalar t0;
+  PetscScalar tmax;
+  PetscScalar t;
+  PetscInt it;
   PetscInt nt;
-  PetscScalar tf;
 } time_par;
 
 typedef struct{
   PetscInt isrc;
   PetscInt jsrc;
   PetscInt ksrc;
-  PetscScalar f0;
+  PetscScalar factor; // ampliturde
+  PetscScalar angle_force;
+  PetscScalar f0; // frequency
+  PetscScalar fx; // force x
+  PetscScalar fy; // force y
+  PetscScalar fz; // force z
 } source;
 
 // User context to use with PETSc functions
@@ -93,6 +104,7 @@ typedef struct {
   wfield wf;
   model_par model;
   time_par time;
+  source src;
 } ctx_t;
 
 
@@ -125,7 +137,9 @@ main(int argc, char * args[])
 
   PetscInt *pnx, *pny, *pnz, *pnt;
 
-  PetscScalar *pt0, *pdt, *ptf;
+  PetscScalar *pt0, *pdt, *ptmax;
+
+  PetscScalar norm;
 
   ctx_t ctx, *pctx;
   PetscInt tmp;
@@ -174,7 +188,7 @@ main(int argc, char * args[])
   pnt = &ctx.time.nt;
   pt0 = &ctx.time.t0;
   pdt = &ctx.time.dt;
-  ptf = &ctx.time.tf;
+  ptmax = &ctx.time.tmax;
 
 
 
@@ -221,7 +235,7 @@ main(int argc, char * args[])
   ierr = VecDuplicate(*puz, puzm2); CHKERRQ(ierr);  // uz at time n-2
   ierr = VecDuplicate(*puz, puzm3); CHKERRQ(ierr);  // uz at time n-3 
 
-  ierr = VecSet(*pc11, 2.f); CHKERRQ(ierr);      // Fill elastic properties vectors
+  ierr = VecSet(*pc11, 0.1f); CHKERRQ(ierr);      // Fill elastic properties vectors
   ierr = VecSet(*pc12, 1.f); CHKERRQ(ierr);
   ierr = VecSet(*pc13, 1.f); CHKERRQ(ierr);
   ierr = VecSet(*pc44, 1.f); CHKERRQ(ierr);
@@ -245,17 +259,24 @@ main(int argc, char * args[])
 
   VecMax(ctx.model.c11, NULL, &cmax);
 
-  *pdt = *pxmax / cmax; //[sec]
+  *pdt = *pdx / cmax; //[sec]
   *pt0 = 0.0;
-  *ptf = 3.f; //[sec]
-  *pnt = *ptf / *pdt;
+  *ptmax = 3.f; //[sec]
+  *pnt = *ptmax / *pdt;
+
+  ctx.src.isrc = (int) *pnx / 2;
+  ctx.src.jsrc = (int) *pny / 2;
+  ctx.src.ksrc = (int) *pnz / 2;
+  ctx.src.f0 = 50.f; //[Hz]
+  ctx.src.factor = pow(10.f,5); //
+  ctx.src.angle_force = 90; // degrees
 
   PetscPrintf(PETSC_COMM_WORLD,"MODEL:\n");
   PetscPrintf(PETSC_COMM_WORLD,"\t XMAX %f \t DX %f \t NX %i\n",*pxmax, *pdx, *pnx);
   PetscPrintf(PETSC_COMM_WORLD,"\t YMAX %f \t DY %f \t NY %i\n",*pymax, *pdy, *pny);
   PetscPrintf(PETSC_COMM_WORLD,"\t ZMAX %f \t DZ %f \t NZ %i\n",*pzmax, *pdz, *pnz);
   PetscPrintf(PETSC_COMM_WORLD,"TIME STEPPING: \n");
-  PetscPrintf(PETSC_COMM_WORLD,"\t TMAX %f \t DT %f \t NT %i\n", *ptf, *pdt, *pnt);
+  PetscPrintf(PETSC_COMM_WORLD,"\t TMAX %f \t DT %f \t NT %i\n", *ptmax, *pdt, *pnt);
   
   VecGetSize(*pux, &tmp);
   PetscPrintf(PETSC_COMM_WORLD,"MATRICES AND VECTORS: \n");
@@ -300,7 +321,8 @@ main(int argc, char * args[])
   */
   for (int it  = 1; it <= *pnt; it ++)
   {
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", it, ctx.time.nt);   CHKERRQ(ierr);
+    ctx.time.it = it;
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
     
     ierr = KSPSolve(ksp_ux, b, *pux);   CHKERRQ(ierr);  // Solve the linear system using KSP
 
@@ -315,6 +337,8 @@ main(int argc, char * args[])
     ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
     // ierr = save_wavefield_to_m_file(*pc11, &buffer); CHKERRQ(ierr);
 
+    VecNorm(*pux,NORM_2,&norm);
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
     ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
   }
 
@@ -359,14 +383,72 @@ save_wavefield_to_m_file(Vec u, void * filename)
 }
 
 
+// SOURCE TERM
+PetscErrorCode
+source_term(void * ctx)
+{
+  PetscFunctionBegin;
+  PetscScalar f0, t, t0, it, a, dt, source_term, factor;
+  PetscScalar force_x, force_y, force_z, angle_force;
+  // PetscErrorCode ierr;
+  
+  ctx_t *c = (ctx_t *) ctx;
+
+  f0 = c->src.f0;
+  it = c->time.it;
+  t0 = c->time.t0;
+  dt = c->time.dt;
+  factor = c->src.factor;
+  angle_force = c->src.angle_force;
+
+//add the source (force vector located at a given grid point)
+  a = PI*PI*f0*f0;
+  t = (double) (it-1) * dt;
+
+//Gaussian
+  source_term = factor * exp(-a * pow((t-t0),2));
+
+//first derivative of a Gaussian
+  // source_term = - factor * 2.d0*a*(t-t0)*exp(-a*(t-t0)**2)
+
+//Ricker source time function (second derivative of a Gaussian)
+//source_term = factor * (1.d0 - 2.d0*a*(t-t0)**2)*exp(-a*(t-t0)**2)
+
+  force_x = sin(angle_force * DEGREES_TO_RADIANS) * source_term;
+  force_y = cos(angle_force * DEGREES_TO_RADIANS) * source_term;
+  force_z = sin(angle_force * DEGREES_TO_RADIANS) * source_term;
+
+  PetscPrintf(PETSC_COMM_WORLD,"fx = %f \n", force_x);
+
+  debprint(f0);
+  debprint(it);
+  debprint(t0);
+  debprint(dt);
+  debprint(factor);
+  debprint(angle_force);
+  debprint(DEGREES_TO_RADIANS);
+  debprint(t);
+  debprint(source_term);
+
+  c->src.fx = force_x;
+  c->src.fy = force_y;
+  c->src.fz = force_z;
+
+  PetscFunctionReturn(0);
+}
+
+
 // UPDATE RHS OF UX EQUATION
 PetscErrorCode
 update_b_ux(KSP ksp, Vec b, void * ctx) 
 {
   PetscFunctionBegin;
   PetscErrorCode ierr;
-
+  PetscScalar dt2;
   ctx_t *c = (ctx_t *) ctx;
+
+  source_term(c);
+  dt2 = pow(c->time.dt,2);
 
   // ierr = VecCopy(c->wf.ux, b);   CHKERRQ(ierr);
 /* Get the DM oject of the KSP */
@@ -386,12 +468,13 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
       viewed as a C array */
   
   double *** _b;
-  double *** _uxm1, ***_uxm2, ***_uxm3;
+  double *** _uxm1, ***_uxm2, ***_uxm3, ***_rho;
 
   ierr = DMDAVecGetArray(da, b, &_b);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->wf.uxm1, &_uxm1);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->wf.uxm2, &_uxm2);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, c->model.rho, &_rho);   CHKERRQ(ierr);
 
   /*
     Loop over the grid points, and fill b 
@@ -417,7 +500,7 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
         { 
           double f = hx * hy * hz; // Scaling
           
-          f*= 2.5f * _uxm1[k][j][i] - 2.f * _uxm2[k][j][i] + 0.5f * _uxm3[k][j][i];
+          f*= 2.5f * _uxm1[k][j][i] - 2.f * _uxm2[k][j][i] + 0.5f * _uxm3[k][j][i] + dt2 / (2.f * _rho[k][j][i]) * c->src.fx;
 
           _b[k][j][i] = f;
         }
@@ -444,14 +527,14 @@ compute_b_ux(KSP ksp, Vec b, void * ctx)
   PetscFunctionBegin;
   PetscErrorCode ierr;
   ctx_t *c = (ctx_t *) ctx;
-  PetscInt midnx, midny, midnz;
+  // PetscInt midnx, midny, midnz;
   PetscScalar dt;
 
   dt = c->time.dt;
   
-  midnx = (int) (c->model.nx / 2); 
-  midny = (int) (c->model.ny / 2); 
-  midnz = (int) (c->model.nz / 2); 
+  // midnx = (int) (c->model.nx / 2); 
+  // midny = (int) (c->model.ny / 2); 
+  // midnz = (int) (c->model.nz / 2); 
   
   // ierr = PetscPrintf(PETSC_COMM_WORLD, "%i\n",midnx); CHKERRQ(ierr);
 
@@ -495,7 +578,7 @@ compute_b_ux(KSP ksp, Vec b, void * ctx)
         {  
           double f = dt * dt * hx * hy * hz / (2.f * rho[k][j][i]); // Scaling
 
-          if ((i>=midnx) && (i<=midnx+1) && (j>=midny) && (j<=midny+1) && (k>=midnz) && (k<=midnz+1))
+          if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
           {
             f *= 1.f;
           }
@@ -503,6 +586,8 @@ compute_b_ux(KSP ksp, Vec b, void * ctx)
           {
             f *= 0.f;
           }
+
+          // f*=0.f;
 
           _b[k][j][i] = f;
 
