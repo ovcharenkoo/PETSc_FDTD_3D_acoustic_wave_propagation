@@ -204,7 +204,7 @@ main(int argc, char * args[])
     CREATE DMDA OBJECT. MESH
   */
   ierr = DMDACreate3d(comm, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,  // Create mesh
-                      DMDA_STENCIL_STAR, -17, -17, -17, PETSC_DECIDE, PETSC_DECIDE,
+                      DMDA_STENCIL_STAR, -25, -25, -25, PETSC_DECIDE, PETSC_DECIDE,
                       PETSC_DECIDE, 1, 1, NULL, NULL, NULL, &da);   CHKERRQ(ierr);
 
   ierr = DMDAGetInfo(da,0,pnx, pny, pnz, 0,0,0,0,0,0,0,0,0);  CHKERRQ(ierr); // Get NX, Ny, NZ
@@ -235,80 +235,102 @@ main(int argc, char * args[])
   ierr = VecDuplicate(*puz, puzm2); CHKERRQ(ierr);  // uz at time n-2
   ierr = VecDuplicate(*puz, puzm3); CHKERRQ(ierr);  // uz at time n-3 
 
-  ierr = VecSet(*pc11, 0.1f); CHKERRQ(ierr);      // Fill elastic properties vectors
+  ierr = VecSet(*pc11, 1800.f); CHKERRQ(ierr);      // Fill elastic properties vectors
   ierr = VecSet(*pc12, 1.f); CHKERRQ(ierr);
   ierr = VecSet(*pc13, 1.f); CHKERRQ(ierr);
   ierr = VecSet(*pc44, 1.f); CHKERRQ(ierr);
   ierr = VecSet(*pc66, 1.f); CHKERRQ(ierr);
-  ierr = VecSet(*prho, 1.f); CHKERRQ(ierr);
+  ierr = VecSet(*prho, 1000.f); CHKERRQ(ierr); // kg/m3
 
 
   /*----------------------------------------------------------------------
     SET MODEL PATRAMETERS
   ------------------------------------------------------------------------*/
+  // MODEL SIZE Xmax Ymax Zmax in meters
+  *pxmax = 1000.f; //[m]
+  *pymax = 1000.f;
+  *pzmax = 1000.f;
 
-  *pxmax = 1.f; //[km]
-  *pymax = 1.f;
-  *pzmax = 1.f;
-
-  *pdx = *pxmax / *pnx; //[km]
+  // GRID STEP DX DY and DZ
+  *pdx = *pxmax / *pnx; //[m]
   *pdy = *pymax / *pny;
   *pdz = *pzmax / *pnz;
 
-  double cmax;
+  double cmax, cmin, lambda_max;
 
   VecMax(ctx.model.c11, NULL, &cmax);
+  VecMin(ctx.model.c11, NULL, &cmin);
 
+  // TIME STEPPING PARAMETERS
   *pdt = *pdx / cmax; //[sec]
-  *pt0 = 0.0;
-  *ptmax = 3.f; //[sec]
+  *ptmax = 1.f; //[sec]
   *pnt = *ptmax / *pdt;
 
+  // SOURCE PARAMETERS
   ctx.src.isrc = (int) *pnx / 2;
   ctx.src.jsrc = (int) *pny / 2;
   ctx.src.ksrc = (int) *pnz / 2;
-  ctx.src.f0 = 50.f; //[Hz]
-  ctx.src.factor = pow(10.f,5); //
+  ctx.src.f0 = 18.f; //[Hz]
+  ctx.src.factor = pow(10.f,10); //
   ctx.src.angle_force = 90; // degrees
+
+  lambda_max = cmax / ctx.src.f0;
 
   PetscPrintf(PETSC_COMM_WORLD,"MODEL:\n");
   PetscPrintf(PETSC_COMM_WORLD,"\t XMAX %f \t DX %f \t NX %i\n",*pxmax, *pdx, *pnx);
   PetscPrintf(PETSC_COMM_WORLD,"\t YMAX %f \t DY %f \t NY %i\n",*pymax, *pdy, *pny);
   PetscPrintf(PETSC_COMM_WORLD,"\t ZMAX %f \t DZ %f \t NZ %i\n",*pzmax, *pdz, *pnz);
+  PetscPrintf(PETSC_COMM_WORLD,"\t MAX C \t %f \n", cmax);
+  PetscPrintf(PETSC_COMM_WORLD,"\t MIN C \t %f \n", cmin);
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
+
+  PetscPrintf(PETSC_COMM_WORLD,"SOURCE:\n");
+  PetscPrintf(PETSC_COMM_WORLD,"\t ISRC %i \t JSRC %i \t KSRC %i\n", ctx.src.isrc, ctx.src.jsrc, ctx.src.ksrc);
+  PetscPrintf(PETSC_COMM_WORLD,"\t F0 \t %f \n", ctx.src.f0);
+  PetscPrintf(PETSC_COMM_WORLD,"\t MAX Lambda \t %f m \n", lambda_max);
+  PetscPrintf(PETSC_COMM_WORLD,"\t POINTS PER WAVELENGTH \t %f \n", lambda_max/(*pdx));
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
+
   PetscPrintf(PETSC_COMM_WORLD,"TIME STEPPING: \n");
   PetscPrintf(PETSC_COMM_WORLD,"\t TMAX %f \t DT %f \t NT %i\n", *ptmax, *pdt, *pnt);
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
+
+  PetscPrintf(PETSC_COMM_WORLD,"CFL CONDITION: \t %f \n", cmax * (*pdt)/(*pdx));
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
   
   VecGetSize(*pux, &tmp);
   PetscPrintf(PETSC_COMM_WORLD,"MATRICES AND VECTORS: \n");
-  PetscPrintf(PETSC_COMM_WORLD,"\t Vec elements %i\n", tmp);
-  PetscPrintf(PETSC_COMM_WORLD,"\t Mat elements %i\n", tmp * tmp);
+  PetscPrintf(PETSC_COMM_WORLD,"\t Vec elements \t %i\n", tmp);
+  PetscPrintf(PETSC_COMM_WORLD,"\t Mat \t %i x %i x %i \n", *pnx, *pny, *pnz);
+
+
 
   /*  
     CREATE KSP, KRYLOV SUBSPACE OBJECTS 
   */
 
-  KSP ksp_ux, ksp_uy, ksp_uz;
+  KSP ksp_ux; //, ksp_uy, ksp_uz;
 
   // Create Krylov solver for ux component
   ierr = KSPCreate(comm, &ksp_ux);   CHKERRQ(ierr);                       // Create the KPS object
   ierr = KSPSetDM(ksp_ux, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeRHS(ksp_ux, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  // ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
   ierr = KSPSetComputeOperators(ksp_ux, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
   ierr = KSPSetFromOptions(ksp_ux);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
-  // Create Krylov solver for uy component
-  ierr = KSPCreate(comm, &ksp_uy);   CHKERRQ(ierr);                       // Create the KPS object
-  ierr = KSPSetDM(ksp_uy, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeRHS(ksp_uy, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
-  ierr = KSPSetComputeOperators(ksp_uy, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
-  ierr = KSPSetFromOptions(ksp_uy);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
+  // // Create Krylov solver for uy component
+  // ierr = KSPCreate(comm, &ksp_uy);   CHKERRQ(ierr);                       // Create the KPS object
+  // ierr = KSPSetDM(ksp_uy, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
+  // ierr = KSPSetComputeRHS(ksp_uy, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  // ierr = KSPSetComputeOperators(ksp_uy, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
+  // ierr = KSPSetFromOptions(ksp_uy);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
-  // Create Krylov solver for uz component
-  ierr = KSPCreate(comm, &ksp_uz);   CHKERRQ(ierr);                       // Create the KPS object
-  ierr = KSPSetDM(ksp_uz, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeRHS(ksp_uz, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
-  ierr = KSPSetComputeOperators(ksp_uz, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
-  ierr = KSPSetFromOptions(ksp_uz);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
+  // // Create Krylov solver for uz component
+  // ierr = KSPCreate(comm, &ksp_uz);   CHKERRQ(ierr);                       // Create the KPS object
+  // ierr = KSPSetDM(ksp_uz, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
+  // ierr = KSPSetComputeRHS(ksp_uz, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  // ierr = KSPSetComputeOperators(ksp_uz, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
+  // ierr = KSPSetFromOptions(ksp_uz);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
 
 
@@ -324,22 +346,30 @@ main(int argc, char * args[])
     ctx.time.it = it;
     ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
     
+    // ierr = VecSet(*pux, 0.f); CHKERRQ(ierr);
+    ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr); // new rhs for next iteration
     ierr = KSPSolve(ksp_ux, b, *pux);   CHKERRQ(ierr);  // Solve the linear system using KSP
 
     ierr = VecCopy(*puxm2, *puxm3);   CHKERRQ(ierr);    // copy vector um2 to um3
     ierr = VecCopy(*puxm1, *puxm2);   CHKERRQ(ierr);    // copy vector um1 to um2
     ierr = VecCopy(*pux, *puxm1);   CHKERRQ(ierr);      // copy vector u to um1
 
-    ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr); // new rhs for next iteration
+    VecMax(*pux, NULL, &cmax);
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "UX max: \t %g \n", cmax); CHKERRQ(ierr);
 
-    char buffer[32];                                 // The filename buffer.
-    snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
-    ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
-    // ierr = save_wavefield_to_m_file(*pc11, &buffer); CHKERRQ(ierr);
+    // if (((int) it%10) ==0)
+    if (it<10)
+    {
+      char buffer[32];                                 // The filename buffer.
+      snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
+      ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
+      // ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
+      // ierr = save_wavefield_to_m_file(*pc11, &buffer); CHKERRQ(ierr);
 
-    VecNorm(*pux,NORM_2,&norm);
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
+      VecNorm(*pux,NORM_2,&norm);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
+    }
   }
 
 
@@ -352,8 +382,8 @@ main(int argc, char * args[])
 
   ierr = VecDestroy(&b);   CHKERRQ(ierr);
   ierr = KSPDestroy(&ksp_ux);   CHKERRQ(ierr);
-  ierr = KSPDestroy(&ksp_uy);   CHKERRQ(ierr);
-  ierr = KSPDestroy(&ksp_uz);   CHKERRQ(ierr);
+  // ierr = KSPDestroy(&ksp_uy);   CHKERRQ(ierr);
+  // ierr = KSPDestroy(&ksp_uz);   CHKERRQ(ierr);
   ierr = DMDestroy(&da);   CHKERRQ(ierr);
 
   ierr = PetscFinalize();   CHKERRQ(ierr);
@@ -396,7 +426,7 @@ source_term(void * ctx)
 
   f0 = c->src.f0;
   it = c->time.it;
-  t0 = c->time.t0;
+  t0 = 1.2f / f0;
   dt = c->time.dt;
   factor = c->src.factor;
   angle_force = c->src.angle_force;
@@ -418,17 +448,18 @@ source_term(void * ctx)
   force_y = cos(angle_force * DEGREES_TO_RADIANS) * source_term;
   force_z = sin(angle_force * DEGREES_TO_RADIANS) * source_term;
 
-  PetscPrintf(PETSC_COMM_WORLD,"fx = %f \n", force_x);
+  // PetscPrintf(PETSC_COMM_WORLD,"fx = %f \n", force_x);
 
-  debprint(f0);
-  debprint(it);
-  debprint(t0);
-  debprint(dt);
-  debprint(factor);
-  debprint(angle_force);
-  debprint(DEGREES_TO_RADIANS);
-  debprint(t);
-  debprint(source_term);
+  // debprint(f0);
+  // debprint(it);
+  // debprint(t0);
+  // debprint(dt);
+  // debprint(factor);
+  // debprint(angle_force);
+  // debprint(DEGREES_TO_RADIANS);
+  // debprint(t);
+  // debprint(source_term);
+  PetscPrintf(PETSC_COMM_WORLD," \n");
 
   c->src.fx = force_x;
   c->src.fy = force_y;
@@ -479,6 +510,7 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
   /*
     Loop over the grid points, and fill b 
   */
+  double f, source_term;
   unsigned int k;
   for(k = grid.zs; k < (grid.zs + grid.zm); k++) // Depth
   {
@@ -498,10 +530,19 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
         /* Interior nodes in the domain (\Omega) */
         else 
         { 
-          double f = hx * hy * hz; // Scaling
-          
-          f*= 2.5f * _uxm1[k][j][i] - 2.f * _uxm2[k][j][i] + 0.5f * _uxm3[k][j][i] + dt2 / (2.f * _rho[k][j][i]) * c->src.fx;
 
+          f = hx * hy * hz; // Scaling
+          if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
+          {
+            source_term = dt2 / (2.f * _rho[k][j][i]) * (c->src.fx);
+          }
+          else
+          {
+            source_term = 0.f;
+          }
+
+          f*= 2.5f * _uxm1[k][j][i] - 2.f * _uxm2[k][j][i] + 0.5f * _uxm3[k][j][i] + source_term;
+          // debprint(c->src.fx);
           _b[k][j][i] = f;
         }
       }
@@ -510,10 +551,10 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
 
   ierr = DMDAVecRestoreArray(da, b, &_b);   CHKERRQ(ierr);   // Release the resource
 
-  MatNullSpace   nullspace;
-  MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
-  MatNullSpaceRemove(nullspace,b);
-  MatNullSpaceDestroy(&nullspace);
+  // MatNullSpace   nullspace;
+  // MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
+  // MatNullSpaceRemove(nullspace,b);
+  // MatNullSpaceDestroy(&nullspace);
   
   PetscFunctionReturn(0);
 }
@@ -578,16 +619,16 @@ compute_b_ux(KSP ksp, Vec b, void * ctx)
         {  
           double f = dt * dt * hx * hy * hz / (2.f * rho[k][j][i]); // Scaling
 
-          if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
-          {
-            f *= 1.f;
-          }
-          else
-          {
-            f *= 0.f;
-          }
+          // if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
+          // {
+          //   f *= 1.f;
+          // }
+          // else
+          // {
+          //   f *= 0.f;
+          // }
 
-          // f*=0.f;
+          f*=0.f;
 
           _b[k][j][i] = f;
 

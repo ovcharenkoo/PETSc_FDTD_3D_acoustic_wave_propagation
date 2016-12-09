@@ -9,7 +9,7 @@
 clear all;
 close all;
 
-for ii = 2:2
+for ii = 1:10
     name = ['tmp_Bvec_' num2str(ii)];
     run(name);
 
@@ -20,11 +20,11 @@ for ii = 2:2
     % u = resample3Dimage(u, 2);
 
     %%
-    % close all;
-    % 
-    % for i=2:max(size(u))-1
-    %     clf; imagesc(squeeze(u(i,:,:))); title(num2str(i)); colorbar; drawnow; pause(0.2);
-    % end
+%     close all;
+%     
+%     for i=2:max(size(u))-1
+%         clf; imagesc(squeeze(u(i,:,:))); title(num2str(i)); colorbar; drawnow; pause(0.2);
+%     end
 
     %% 3D transparent
 %     close all;
