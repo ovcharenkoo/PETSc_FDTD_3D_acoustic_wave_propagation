@@ -10,7 +10,7 @@ clear all;
 close all;
 
 for ii = 1:10
-    name = ['tmp_Bvec_' num2str(ii)];
+    name = ['tmp_Bvec_' num2str(ii*10)];
     run(name);
 
     %%

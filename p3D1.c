@@ -27,8 +27,8 @@
 
 //User-functions prototypes
 PetscErrorCode compute_A_ux(KSP, Mat, Mat, void *);
-PetscErrorCode compute_A_uy(KSP, Mat, Mat, void *); 
-PetscErrorCode compute_A_uz(KSP, Mat, Mat, void *);
+// PetscErrorCode compute_A_uy(KSP, Mat, Mat, void *); 
+// PetscErrorCode compute_A_uz(KSP, Mat, Mat, void *);
 PetscErrorCode compute_b_ux(KSP, Vec, void *);
 PetscErrorCode update_b_ux(KSP, Vec, void *);
 PetscErrorCode save_wavefield_to_m_file(Vec, void *);
@@ -314,7 +314,7 @@ main(int argc, char * args[])
   // Create Krylov solver for ux component
   ierr = KSPCreate(comm, &ksp_ux);   CHKERRQ(ierr);                       // Create the KPS object
   ierr = KSPSetDM(ksp_ux, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
-  // ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
+  // ierr = KSPSetComputeRHS(ksp_ux, compute_b_ux, &ctx);   CHKERRQ(ierr);   // Compute the right-hand side vector b
   ierr = KSPSetComputeOperators(ksp_ux, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
   ierr = KSPSetFromOptions(ksp_ux);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
@@ -356,9 +356,11 @@ main(int argc, char * args[])
 
     VecMax(*pux, NULL, &cmax);
     ierr = PetscPrintf(PETSC_COMM_WORLD, "UX max: \t %g \n", cmax); CHKERRQ(ierr);
+    VecMin(*pux, NULL, &cmin);
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "UX min: \t %g \n", cmin); CHKERRQ(ierr);
 
-    // if (((int) it%10) ==0)
-    if (it<10)
+    if (((int) it%10) ==0)
+    // if (it<10)
     {
       char buffer[32];                                 // The filename buffer.
       snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
@@ -534,14 +536,14 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
           f = hx * hy * hz; // Scaling
           if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
           {
-            source_term = dt2 / (2.f * _rho[k][j][i]) * (c->src.fx);
+            source_term = dt2 / _rho[k][j][i] * (c->src.fx);
           }
           else
           {
             source_term = 0.f;
           }
 
-          f*= 2.5f * _uxm1[k][j][i] - 2.f * _uxm2[k][j][i] + 0.5f * _uxm3[k][j][i] + source_term;
+          f*= 5.f * _uxm1[k][j][i] - 4.f * _uxm2[k][j][i] + 1.f * _uxm3[k][j][i] + source_term;
           // debprint(c->src.fx);
           _b[k][j][i] = f;
         }
@@ -551,10 +553,10 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
 
   ierr = DMDAVecRestoreArray(da, b, &_b);   CHKERRQ(ierr);   // Release the resource
 
-  // MatNullSpace   nullspace;
-  // MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
-  // MatNullSpaceRemove(nullspace,b);
-  // MatNullSpaceDestroy(&nullspace);
+  MatNullSpace   nullspace;
+  MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
+  MatNullSpaceRemove(nullspace,b);
+  MatNullSpaceDestroy(&nullspace);
   
   PetscFunctionReturn(0);
 }
@@ -664,7 +666,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
 
   PetscErrorCode ierr;
   PetscScalar v[7], hx, hy, hz, hyhzdhx, hxhzdhy, hxhydhz;
-  PetscScalar dt, dt2_2;
+  PetscScalar dt, dt2;
   double ***rho, ***c11;
   PetscInt n;
   DM da;
@@ -681,7 +683,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   ierr = DMDAVecGetArray(da, c->model.rho, &rho);   CHKERRQ(ierr);
   
   dt = c->time.dt;
-  dt2_2 = dt * dt / 2.f;
+  dt2 = dt * dt;
 
   hx = (1.f / (double) (grid.mx - 1));
   hy = (1.f / (double) (grid.my - 1));
@@ -720,7 +722,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
         /* Interior nodes in the domain (\Omega) */
         else 
         {
-          v[0] = dt2_2/rho[k][j][i] * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
+          v[0] = c11[k][j][i] * dt2/rho[k][j][i] * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
         // If neighbor is not a known boundary value
         // then we put an entry
 
@@ -731,7 +733,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i - 1;
           idxn[n].k = k;
 
-          v[n] = - dt2_2/rho[k][j][i] * hyhzdhx; // Fill with the value
+          v[n] = - c11[k][j][i] *  dt2/rho[k][j][i] * hyhzdhx; // Fill with the value
           
           n++; // One column added
         }
@@ -742,7 +744,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i + 1;
           idxn[n].k = k;
 
-          v[n] = - dt2_2/rho[k][j][i] * hyhzdhx;  // Fill with the value
+          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hyhzdhx;  // Fill with the value
 
           n++; // One column added
         }
@@ -753,7 +755,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - dt2_2/rho[k][j][i] * hxhzdhy; // Fill with the value
+          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
   
           n++; // One column added
         }
@@ -764,7 +766,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - dt2_2/rho[k][j][i] * hxhzdhy; // Fill with the value
+          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
 
           n++; // One column added
         }
@@ -776,7 +778,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k - 1;
 
-          v[n] = - dt2_2/rho[k][j][i] * hxhydhz; // Fill with the value
+          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
 
           n++; // One column added
         }
@@ -788,7 +790,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k + 1;
 
-          v[n] = - dt2_2/rho[k][j][i] * hxhydhz; // Fill with the value
+          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
 
           n++; // One column added
         }
@@ -797,7 +799,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
         // {
         //   v[ii]*= dt*dt / (2.0 * 1.f);
         // }
-        v[0]+= hx * hy * hz;
+        v[0]+= 2.f * hx * hy * hz;
       }
       
 
