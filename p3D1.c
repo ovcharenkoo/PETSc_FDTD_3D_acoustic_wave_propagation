@@ -344,7 +344,6 @@ main(int argc, char * args[])
   for (int it  = 1; it <= *pnt; it ++)
   {
     ctx.time.it = it;
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
     
     // ierr = VecSet(*pux, 0.f); CHKERRQ(ierr);
     ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr); // new rhs for next iteration
@@ -354,23 +353,29 @@ main(int argc, char * args[])
     ierr = VecCopy(*puxm1, *puxm2);   CHKERRQ(ierr);    // copy vector um1 to um2
     ierr = VecCopy(*pux, *puxm1);   CHKERRQ(ierr);      // copy vector u to um1
 
-    VecMax(*pux, NULL, &cmax);
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "UX max: \t %g \n", cmax); CHKERRQ(ierr);
-    VecMin(*pux, NULL, &cmin);
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "UX min: \t %g \n", cmin); CHKERRQ(ierr);
-
-    if (((int) it%10) ==0)
+    if (((int) it%50) ==0)
     // if (it<10)
-    {
+    { ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
+
+      VecMax(*pux, NULL, &cmax);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "UX max: \t %g \n", cmax); CHKERRQ(ierr);
+      
+      VecMin(*pux, NULL, &cmin);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "UX min: \t %g \n", cmin); CHKERRQ(ierr);
+
+      VecNorm(*pux,NORM_2,&norm);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
+
       char buffer[32];                                 // The filename buffer.
       snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
       ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
       // ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
       // ierr = save_wavefield_to_m_file(*pc11, &buffer); CHKERRQ(ierr);
 
-      VecNorm(*pux,NORM_2,&norm);
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
+
+
+      // PetscPrintf(PETSC_COMM_WORLD," \n");
     }
   }
 
@@ -461,7 +466,7 @@ source_term(void * ctx)
   // debprint(DEGREES_TO_RADIANS);
   // debprint(t);
   // debprint(source_term);
-  PetscPrintf(PETSC_COMM_WORLD," \n");
+  // PetscPrintf(PETSC_COMM_WORLD," \n");
 
   c->src.fx = force_x;
   c->src.fy = force_y;
