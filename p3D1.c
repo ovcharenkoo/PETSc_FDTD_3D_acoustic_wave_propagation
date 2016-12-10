@@ -369,7 +369,7 @@ main(int argc, char * args[])
 
       char buffer[32];                                 // The filename buffer.
       snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
-      ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
+      // ierr = save_wavefield_to_m_file(*pux, &buffer); CHKERRQ(ierr);
       // ierr = save_wavefield_to_m_file(b, &buffer); CHKERRQ(ierr);
       // ierr = save_wavefield_to_m_file(*pc11, &buffer); CHKERRQ(ierr);
 
