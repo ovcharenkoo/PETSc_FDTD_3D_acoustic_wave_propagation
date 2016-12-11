@@ -19,6 +19,7 @@
 #include <petscdmda.h>
 #include <petscksp.h>
 #include <math.h>
+#include <time.h>
 
 /*#define debprint(expr) printmax(#expr " = %f\n", expr)*/
 #define debprint(expr) PetscPrintf(PETSC_COMM_WORLD, #expr " = %f \n", expr);
@@ -341,6 +342,8 @@ main(int argc, char * args[])
   /*
     TIME LOOP
   */
+
+  clock_t begin = clock();
   for (int it  = 1; it <= *pnt; it ++)
   {
     ctx.time.it = it;
@@ -365,7 +368,11 @@ main(int argc, char * args[])
 
       VecNorm(*pux,NORM_2,&norm);
       ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
+
+
+      clock_t end = clock();
+      double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "Elapsed time: \t %f sec \n", time_spent); CHKERRQ(ierr);
 
       char buffer[32];                                 // The filename buffer.
       snprintf(buffer, sizeof(buffer), "tmp_Bvec_%i.m", it);
@@ -374,8 +381,7 @@ main(int argc, char * args[])
       // ierr = save_wavefield_to_m_file(*pc11, &buffer); CHKERRQ(ierr);
 
 
-
-      // PetscPrintf(PETSC_COMM_WORLD," \n");
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
     }
   }
 
