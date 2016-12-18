@@ -15,4 +15,4 @@ all: clean $(PROGS)
 	${RM} *.o
 
 clean::
-	rm -rf *.o *.out
+	rm -rf *.o *.out seis_* tmp_*
