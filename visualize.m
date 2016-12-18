@@ -9,8 +9,8 @@
 clear all;
 close all;
 
-for ii = 2:2
-    name = ['tmp_Bvec_' num2str(ii*50)];
+for ii = 1:4
+    name = ['tmp_Bvec_' num2str(ii*40)];
     run(name);
 
     %%
@@ -26,15 +26,23 @@ for ii = 2:2
 %         clf; imagesc(squeeze(u(i,:,:))); title(num2str(i)); colorbar; drawnow; pause(0.2);
 %     end
 
+%%
+%     close all;
+    
+    for i=round(max(size(u))/2):round(max(size(u))/2)
+        clf; imagesc(squeeze(u(i,:,:))); title(num2str(i)); colorbar; drawnow; pause(0.2);
+    end
+
+
     %% 3D transparent
 %     close all;
 
-    indPatch=1:numel(u);
-    [F,V,C]=ind2patch(indPatch,u,'v');
-    kk = 0.01;
-    clf; patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha','flat','FaceVertexAlphaData',double(C > kk * max(C)));
-    % patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha',0.5);
-    axis equal; view(3); axis tight; axis vis3d; grid off; colorbar; title(num2str(ii));
+%     indPatch=1:numel(u);
+%     [F,V,C]=ind2patch(indPatch,u,'v');
+%     kk = 0.01;
+%     clf; patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha','flat','FaceVertexAlphaData',double(C > kk * max(C)));
+%     % patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha',0.5);
+%     axis equal; view(3); axis tight; axis vis3d; grid off; colorbar; title(num2str(ii));
 
     %%
 

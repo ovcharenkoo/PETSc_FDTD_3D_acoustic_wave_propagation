@@ -30,5 +30,8 @@ PETSC_MPIRUN=/Users/ovcharoo/Software/petsc-3.7.3/arch-darwin-c-debug/bin/mpirun
 rm tmp_*
 #${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -pc_type mg -da_refine 3 -ksp_converged_reason
 
-${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -da_refine 2 -ksp_converged_reason
+#${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -da_refine 2 -ksp_converged_reason
 
+#${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -pc_type gamg -da_refine 2 -ksp_converged_reason
+
+${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -da_refine 2 -ksp_converged_reason
