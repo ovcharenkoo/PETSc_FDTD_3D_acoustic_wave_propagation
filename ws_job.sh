@@ -34,4 +34,4 @@ rm tmp_*
 
 #${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -pc_type gamg -da_refine 2 -ksp_converged_reason
 
-${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -da_refine 2 -ksp_converged_reason
+${PETSC_MPIRUN} -n 4 ./p3D_acoustic.out -ksp_type cg -da_refine 2 -ksp_converged_reason

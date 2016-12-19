@@ -7,3 +7,6 @@ binaryoutput
 *.info
 tmp*
 seis_*
+*.aux
+*.log
+*.gz

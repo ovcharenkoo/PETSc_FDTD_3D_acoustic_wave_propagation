@@ -1,0 +1,107 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage[colorlinks = true,
+            linkcolor = black,
+            urlcolor  = black,
+            citecolor = blue,
+            anchorcolor = black]{hyperref}
+\graphicspath{ {./pics/} } %set path to folder with images
+
+\usepackage{nccmath}
+\newenvironment{mpmatrix}{\begin{medsize}\begin{pmatrix}}%
+{\end{pmatrix}\end{medsize}}%
+
+\usepackage{booktabs, rotating}
+\usepackage[verbose]{placeins}
+
+\DeclareMathOperator*{\argmin}{\arg\!\min}
+
+%\begin{figure}[h!]
+%\begin{minipage}[h!]{0.49\textwidth}
+%	\center{\includegraphics[width=0.8 \linewidth]{cgrid.png}}
+%  	\caption{Computational conventional Cartesian grid. Elastic constants and density are given for each point separately, $U_i$ denotes to  displacement wavefield component corresponding to the node}
+%  	\label{fig:comp_grid_param}
+%\end{minipage}
+%\hfill
+%\begin{minipage}[h!]{0.49\textwidth}
+%	\center{\includegraphics[width=0.8 \linewidth]{2D_stencil.png}}
+%  	\caption{Nine-point stencil used for computation of spatial derivatives}
+%  	\label{fig:2D_wg_stencil}
+%\end{minipage}
+%\end{figure}
+
+\title{AMCS 312. Course project}
+\author{Oleg Ovcharenko}
+\begin{document}
+\maketitle
+\section*{Introduction}
+The aim of this study is to explore how efficient could be Krylov-iterative methods implemented in PETSc solving hyperbolic equations with implicit time stepping, such as wave equations.\\
+
+As a particular example we consider a simplified case, because it is sufficient for the performance comparison purposes. The framework is as follows:
+\begin{enumerate}
+\item[] \textbf{Equation:} Strong form of equation of motion
+\item[] \textbf{Discretization:} Finite differences in time domain (FDTD)
+\item[] \textbf{Time stepping:} Implicit
+\item[] \textbf{Accuracy:} 2nd order schemes in space and time
+\item[] \textbf{Model:} Homogeneous isotropic media with constant velocity
+\item[] \textbf{Programming:} C/C++ with PETSc 3.7.3\\
+\end{enumerate} 
+
+\section*{3D acoustic wave equation}
+Acoustic wave equation for homogeneous media in strong formulation could be expressed as follows
+\begin{equation}
+\rho \frac{\partial^2 u}{\partial t^2} - c^2 \left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2} + \frac{\partial^2 u}{\partial z^2}\right) = f
+\end{equation}
+
+We discretize with 2nd order of accuracy both in space and time. Implicit time stepping requires backward time derivative approximation, whereas spacial derivatives are approximated with centered scheme.
+
+\begin{equation}
+\begin{aligned}
+& \rho_{i,j,k} \frac{2 U^{n+1}_{i,j,k} - 5 U^{n}_{i,j,k} + 4 U^{n-1}_{i,j,k} - U^{n-2}_{i,j,k}}{\Delta t^2} = \\
+& c^2_{i,j,k} \frac{U^{n+1}_{i+1,j,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i-1,j,k}}{\Delta x^2} +\\
+& c^2_{i,j,k} \frac{U^{n+1}_{i,j+1,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j-1,k}}{\Delta y^2} + \\
+& c^2_{i,j,k} \frac{U^{n+1}_{i,j,k+1} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j,k-1}}{\Delta z^2} + f_{i,j,k}
+\end{aligned}
+\end{equation}
+
+Hence,
+\if0
+\begin{equation}
+\begin{aligned}
+2 U^{n+1}_{i,j,k} - 5 U^{n}_{i,j,k} + 4 U^{n-1}_{i,j,k} - U^{n-2}_{i,j,k} = \frac{c^2_{i,j,k} \Delta t^2}{\rho_{i,j,k}} (\\
+& \frac{U^{n+1}_{i+1,j,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i-1,j,k}}{\Delta x^2} +\\
+& \frac{U^{n+1}_{i,j+1,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j-1,k}}{\Delta y^2} + \\
+& \frac{U^{n+1}_{i,j,k+1} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j,k-1}}{\Delta z^2} )
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+2 U^{n+1}_{i,j,k} - \frac{c^2_{i,j,k} \Delta t^2}{\rho_{i,j,k}} (
+\frac{U^{n+1}_{i+1,j,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i-1,j,k}}{\Delta x^2} +
+\frac{U^{n+1}_{i,j+1,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j-1,k}}{\Delta y^2} + \\
+\frac{U^{n+1}_{i,j,k+1} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j,k-1}}{\Delta z^2} ) \\= \\ 5 U^{n}_{i,j,k} - 4 U^{n-1}_{i,j,k} + U^{n-2}_{i,j,k} + f_{i,j,k}
+\end{aligned}
+\end{equation}
+\fi
+
+\begin{equation}
+\begin{aligned}
+& U^{n+1}_{i,j,k} \left(2 \Delta x \Delta y \Delta z + 2 \frac{c^2_{i,j,k} \Delta t^2}{\rho_{i,j,k}} \left( \frac{\Delta y \Delta z}{\Delta x} + \frac{\Delta x \Delta z}{\Delta y}+ \frac{\Delta x \Delta y}{\Delta z}\right)\right) + \\
+& U^{n+1}_{i+1,j,k}  \left( -\frac{c^2_{i+1,j,k} \Delta t^2}{\rho_{i+1,j,k}}\ \frac{\Delta y \Delta z}{\Delta x}\right) + \\
+& U^{n+1}_{i-1,j,k}  \left( -\frac{c^2_{i-1,j,k} \Delta t^2}{\rho_{i-1,j,k}}\ \frac{\Delta y \Delta z}{\Delta x}\right) + \\
+& U^{n+1}_{i,j+1,k}  \left( -\frac{c^2_{i,j+1,k} \Delta t^2}{\rho_{i,j+1,k}}\ \frac{\Delta x \Delta z}{\Delta y}\right) + \\
+& U^{n+1}_{i,j-1,k}  \left( -\frac{c^2_{i,j-1,k} \Delta t^2}{\rho_{i,j-1,k}}\ \frac{\Delta x \Delta z}{\Delta y}\right) + \\
+& U^{n+1}_{i,j,k+1}  \left( -\frac{c^2_{i,j,k+1} \Delta t^2}{\rho_{i,j,k+1}}\ \frac{\Delta x \Delta y}{\Delta z}\right) + \\
+& U^{n+1}_{i,j,k-1}  \left( -\frac{c^2_{i,j,k-1} \Delta t^2}{\rho_{i,j,k-1}}\ \frac{\Delta x \Delta y}{\Delta z}\right) = 
+\Delta x \Delta y \Delta z \left( 5 U^{n}_{i,j,k} - 4 U^{n-1}_{i,j,k} + U^{n-2}_{i,j,k} + \frac{\Delta t^2}{\rho_{i,j,k}}f_{i,j,k} \right)
+\end{aligned}
+\end{equation}
+
+\end{document}

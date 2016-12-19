@@ -183,7 +183,7 @@ main(int argc, char * args[])
   ierr = VecDuplicate(*pux, puxm2); CHKERRQ(ierr);        // ux at time n-2
   ierr = VecDuplicate(*pux, puxm3); CHKERRQ(ierr);        // ux at time n-3 
 
-  ierr = VecSet(*pc11, 1800.f); CHKERRQ(ierr);            // c2 velocity
+  ierr = VecSet(*pc11, 1500.f); CHKERRQ(ierr);            // c velocity, m/sec
   ierr = VecSet(*prho, 1000.f); CHKERRQ(ierr);            // kg/m3
 
 
@@ -191,9 +191,9 @@ main(int argc, char * args[])
     SET MODEL PATRAMETERS
   ------------------------------------------------------------------------*/
   // MODEL SIZE Xmax Ymax Zmax in meters
-  *pxmax = 1000.f; //[m]
-  *pymax = 1000.f;
-  *pzmax = 1000.f;
+  *pxmax = 2000.f; //[m]
+  *pymax = 2000.f;
+  *pzmax = 2000.f;
 
   // GRID STEP DX DY and DZ
   *pdx = *pxmax / *pnx; //[m]
@@ -214,16 +214,16 @@ main(int argc, char * args[])
   ctx.src.isrc = (PetscInt) *pnx / 2;
   ctx.src.jsrc = (PetscInt) *pny / 2;
   ctx.src.ksrc = (PetscInt) *pnz / 2;
-  ctx.src.f0 = 70.f; //[Hz]
-  ctx.src.factor = pow(10.f,10); //amplitude
+  ctx.src.f0 = 10.f; //[Hz]
+  ctx.src.factor = pow(10.f,12); //amplitude
   ctx.src.angle_force = 90; // degrees
 
   lambda_max = cmax / ctx.src.f0;                 // Max wavelength in model
 
   // RECEIVERS
-  PetscInt irec[]={ctx.src.isrc, (PetscInt) ctx.src.isrc/2};
-  PetscInt jrec[]={ctx.src.jsrc, (PetscInt) ctx.src.ksrc/2};
-  PetscInt krec[]={ctx.src.ksrc, (PetscInt) ctx.src.ksrc/2}; 
+  PetscInt irec[]={ctx.src.isrc, (PetscInt) ctx.src.isrc/2, (PetscInt) ctx.src.isrc/4};
+  PetscInt jrec[]={ctx.src.jsrc, ctx.src.jsrc, ctx.src.jsrc};
+  PetscInt krec[]={ctx.src.ksrc, ctx.src.ksrc, ctx.src.ksrc}; 
   
   ctx.rec.irec = irec;
   ctx.rec.jrec = jrec;
@@ -231,23 +231,8 @@ main(int argc, char * args[])
 
   ctx.rec.nrec = (PetscInt) sizeof(irec)/sizeof(irec[0]);
 
-  // PetscScalar ***seis = new PetscScalar[ctx.rec.nrec][*pnt][2];
-
-  // PetscScalar ***seis[ctx.rec.nrec][*pnt][2];
   PetscScalar ***seis;
   seis = f3tensor(0,ctx.rec.nrec,0,*pnt,0,2);
-  // seis = new PetscScalar**[ctx.rec.nrec];
-  // for (int i = 0; i < ctx.rec.nrec; i++)
-  // {
-  //   for (int j = 0; j < *pnt; j++)
-  //   {
-  //     for (int k = 0; k < 2; k++)
-  //     {
-  //       seis[i][j][k]=0;
-  //     }
-  //   }
-  // }
-
   ctx.rec.seis = seis;
 
 
@@ -318,9 +303,8 @@ main(int argc, char * args[])
     ierr = VecCopy(*puxm1, *puxm2);   CHKERRQ(ierr);                      // copy vector um1 to um2
     ierr = VecCopy(*pux, *puxm1);   CHKERRQ(ierr);                        // copy vector u to um1
 
-    // write_seismograms();
 
-    if (((int) it%40) ==0)
+    if (((int) it%5) ==0)
     { 
       ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
 
@@ -638,7 +622,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
         /* Interior nodes in the domain (\Omega) */
         else 
         {
-          v[0] = c11[k][j][i] * dt2/rho[k][j][i] * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
+          v[0] = pow(c11[k][j][i],2) * dt2/rho[k][j][i] * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
         // If neighbor is not a known boundary value
         // then we put an entry
 
@@ -649,7 +633,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i - 1;
           idxn[n].k = k;
 
-          v[n] = - c11[k][j][i] *  dt2/rho[k][j][i] * hyhzdhx; // Fill with the value
+          v[n] = - pow(c11[k][j][i],2) *  dt2/rho[k][j][i] * hyhzdhx; // Fill with the value
           
           n++; // One column added
         }
@@ -660,7 +644,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i + 1;
           idxn[n].k = k;
 
-          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hyhzdhx;  // Fill with the value
+          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hyhzdhx;  // Fill with the value
 
           n++; // One column added
         }
@@ -671,7 +655,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
+          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
   
           n++; // One column added
         }
@@ -682,7 +666,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
+          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
 
           n++; // One column added
         }
@@ -694,7 +678,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k - 1;
 
-          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
+          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
 
           n++; // One column added
         }
@@ -706,7 +690,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k + 1;
 
-          v[n] = - c11[k][j][i] * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
+          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
 
           n++; // One column added
         }

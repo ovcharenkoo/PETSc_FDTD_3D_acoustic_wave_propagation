@@ -10,6 +10,7 @@ OBJS=$(patsubst %.c,%.o,$(SRCS))
 
 all: clean $(PROGS)
 
+
 %.out: %.o chkopts
 	$(CC) -o $@ $< ${PETSC_LIB}
 	${RM} *.o
