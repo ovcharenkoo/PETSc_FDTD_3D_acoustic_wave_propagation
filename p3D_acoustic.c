@@ -20,9 +20,9 @@
 PetscErrorCode compute_A_ux(KSP, Mat, Mat, void *);
 PetscErrorCode update_b_ux(KSP, Vec, void *);
 PetscErrorCode save_Vec_to_m_file(Vec, void *);
-PetscErrorCode save_seismograms_to_txt_files(void *);
+PetscErrorCode Save_seismograms_to_txt_files(void *);
 PetscErrorCode source_term(void *);
-PetscErrorCode write_seismograms(KSP, PetscScalar ***, void *);
+PetscErrorCode Write_seismograms(KSP, Vec, void *);
 PetscScalar ***f3tensor(PetscInt, PetscInt, PetscInt, PetscInt,PetscInt, PetscInt);
 
 
@@ -128,7 +128,8 @@ main(int argc, char * args[])
   PetscInt *pnx, *pny, *pnz, *pnt;
   PetscScalar norm;
 
-  bool FOUTPUT = true;
+  bool FOUTPUT                = true;
+  bool SAVE_WAVEFIELD_MATLAB  = true;
 
   clock_t total_time_begin, total_time_end;
   total_time_begin = clock();
@@ -217,7 +218,7 @@ main(int argc, char * args[])
 
   // TIME STEPPING PARAMETERS
   *pdt = *pdx / cmax; //[sec]
-  *ptmax = 1.f; //[sec]
+  *ptmax = 0.5f; //[sec]
   *pnt = *ptmax / *pdt;
 
   // SOURCE PARAMETERS
@@ -238,10 +239,9 @@ main(int argc, char * args[])
   ctx.rec.irec = irec;
   ctx.rec.jrec = jrec;
   ctx.rec.krec = krec;
-
   ctx.rec.nrec = (PetscInt) sizeof(irec)/sizeof(irec[0]);
 
-  PetscScalar ***seis;
+  PetscScalar ***seis; //Array with seismograms [NREC][NT][2], 2 is for time and displacement colums
   seis = f3tensor(0,ctx.rec.nrec,0,*pnt,0,2);
   ctx.rec.seis = seis;
 
@@ -305,6 +305,7 @@ main(int argc, char * args[])
   clock_t end;
 
   int it;
+  int shoot_time;
   for (it  = 1; it <= *pnt; it ++)
   {
     ctx.time.it = it;
@@ -312,41 +313,47 @@ main(int argc, char * args[])
     
     ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr);  // new rhs for next iteration
     ierr = KSPSolve(ksp_ux, b, *pux);   CHKERRQ(ierr);                    // Solve the linear system using KSP
-
+    
+    ierr = Write_seismograms(ksp_ux, *pux, &ctx); CHKERRQ(ierr);
+    
     ierr = VecCopy(*puxm2, *puxm3);   CHKERRQ(ierr);                      // copy vector um2 to um3
     ierr = VecCopy(*puxm1, *puxm2);   CHKERRQ(ierr);                      // copy vector um1 to um2
     ierr = VecCopy(*pux, *puxm1);   CHKERRQ(ierr);                        // copy vector u to um1
 
 
-    if ((FOUTPUT==1) && ((int) it%5) ==0)
+
+    shoot_time = (int) it%10;
+    if (FOUTPUT && shoot_time == 0)
     { 
       end = clock();
       ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
 
-      VecMax(*pux, NULL, &cmax);
+      ierr = VecMax(*pux, NULL, &cmax); CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD, "UX max: \t %g \n", cmax); CHKERRQ(ierr);
       
-      VecMin(*pux, NULL, &cmin);
+      ierr = VecMin(*pux, NULL, &cmin); CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD, "UX min: \t %g \n", cmin); CHKERRQ(ierr);
 
-      VecNorm(*pux,NORM_2,&norm);
+      ierr = VecNorm(*pux,NORM_2,&norm); CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
 
       
       double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
       ierr = PetscPrintf(PETSC_COMM_WORLD, "Elapsed time: \t %f sec \n", time_spent); CHKERRQ(ierr);
 
-      char buffer[32];                                 // The filename buffer.
-      snprintf(buffer, sizeof(buffer), "./wavefields/tmp_Bvec_%i.m", it);
-      ierr = save_Vec_to_m_file(*pux, &buffer); CHKERRQ(ierr);
-      // ierr = save_Vec_to_m_file(*puxm1, &buffer); CHKERRQ(ierr);
-
+      if (SAVE_WAVEFIELD_MATLAB)
+      {
+        char buffer[32];                                 // The filename buffer.
+        snprintf(buffer, sizeof(buffer), "./wavefields/tmp_Bvec_%i.m", it);
+        ierr = save_Vec_to_m_file(*pux, &buffer); CHKERRQ(ierr);
+      }
+      
       ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
       begin = clock();
     }
   }
 
-  save_seismograms_to_txt_files(pctx);
+  ierr = Save_seismograms_to_txt_files(pctx);   CHKERRQ(ierr);
 
   /*
     CLEAN ALLOCATIONS AND EXIT
@@ -388,13 +395,23 @@ main(int argc, char * args[])
 
 // APPEND VALUE TO A SEISMOGRAM
 PetscErrorCode
-write_seismograms(KSP ksp,PetscScalar ***u ,void *ctx)
+Write_seismograms(KSP ksp, Vec u ,void *ctx)
 {
   PetscFunctionBegin;
 
   PetscErrorCode ierr;
 
+  PetscScalar ***_u;
+
   ctx_t *c = (ctx_t *) ctx;
+
+  DM da;
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);           //Get the DM oject of the KSP
+
+  DMDALocalInfo grid;
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
+
+  ierr = DMDAVecGetArray(da, u, &_u);   CHKERRQ(ierr);
   
   PetscScalar t = c->time.t; 
   PetscInt it = c->time.it;
@@ -403,14 +420,9 @@ write_seismograms(KSP ksp,PetscScalar ***u ,void *ctx)
   PetscInt *irec = c->rec.irec;
   PetscInt *jrec = c->rec.jrec;
   PetscInt *krec = c->rec.krec;
-
-  DM da;
-  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr); //Get the DM oject of the KSP
-
-  DMDALocalInfo grid;
-  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
  
   int xrec;
+  PetscScalar  dump;
   for (xrec = 0; xrec < nrec; xrec++)
   {
     if ((irec[xrec] > grid.xs) && (irec[xrec] < (grid.xs + grid.xm)) &&
@@ -418,9 +430,12 @@ write_seismograms(KSP ksp,PetscScalar ***u ,void *ctx)
         (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
         {
           c->rec.seis[xrec][it-1][0] = t;
-          c->rec.seis[xrec][it-1][1] = u[irec[xrec]][jrec[xrec]][krec[xrec]];
+          c->rec.seis[xrec][it-1][1] = _u[krec[xrec]][jrec[xrec]][irec[xrec]];
+          // dump = _u[irec[xrec]][jrec[xrec]][krec[xrec]];
         }
   }
+  
+  ierr = DMDAVecRestoreArray(da, u, &_u);   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
 } 
@@ -496,6 +511,7 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
   PetscFunctionBegin;
   PetscErrorCode ierr;
   PetscScalar dt2;
+
   ctx_t *c = (ctx_t *) ctx;
 
   source_term(c);
@@ -520,9 +536,6 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
   ierr = DMDAVecGetArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->model.rho, &_rho);   CHKERRQ(ierr);
 
-
-  ierr = write_seismograms(ksp, _uxm1, c); CHKERRQ(ierr);
-
   /*
     Loop over the grid points, and fill b 
   */
@@ -546,7 +559,6 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
         /* Interior nodes in the domain (\Omega) */
         else 
         { 
-
           if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
           {
             source_term = dt2 / _rho[k][j][i] * (c->src.fx);
@@ -558,8 +570,6 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
 
           f = hx * hy * hz *
           (5.f * _uxm1[k][j][i] - 4.f * _uxm2[k][j][i] + 1.f * _uxm3[k][j][i] + source_term);
-
-          // PetscPrintf(PETSC_COMM_WORLD, "%f \n", _uxm1[12][12][12]);
 
           _b[k][j][i] = f;
         }
@@ -797,7 +807,7 @@ PetscScalar ***f3tensor(PetscInt nrl, PetscInt nrh, PetscInt ncl, PetscInt nch,P
 
 
 PetscErrorCode
-save_seismograms_to_txt_files(void *ctx) 
+Save_seismograms_to_txt_files(void *ctx) 
 {
   PetscFunctionBegin;
   

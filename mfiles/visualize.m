@@ -10,7 +10,7 @@ clear all;
 close all;
 
 for ii = 1:50
-    name = ['./wavefields/tmp_Bvec_' num2str(ii*5)];
+    name = ['../wavefields/tmp_Bvec_' num2str(ii*10)];
     run(name);
 
     %%
