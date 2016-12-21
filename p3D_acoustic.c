@@ -22,7 +22,7 @@ PetscErrorCode update_b_ux(KSP, Vec, void *);
 PetscErrorCode save_Vec_to_m_file(Vec, void *);
 PetscErrorCode save_seismograms_to_txt_files(void *);
 PetscErrorCode source_term(void *);
-PetscErrorCode write_seismograms(PetscScalar ***, void *);
+PetscErrorCode write_seismograms(KSP, PetscScalar ***, void *);
 PetscScalar ***f3tensor(PetscInt, PetscInt, PetscInt, PetscInt,PetscInt, PetscInt);
 
 
@@ -94,6 +94,11 @@ typedef struct {
 } ctx_t;
 
 
+typedef int bool;
+#define true 1
+#define false 0
+
+
 
 
 
@@ -122,6 +127,11 @@ main(int argc, char * args[])
   PetscScalar *pt0, *pdt, *ptmax;
   PetscInt *pnx, *pny, *pnz, *pnt;
   PetscScalar norm;
+
+  bool FOUTPUT = true;
+
+  clock_t total_time_begin, total_time_end;
+  total_time_begin = clock();
 
   ctx_t ctx, *pctx;
 
@@ -183,24 +193,24 @@ main(int argc, char * args[])
   ierr = VecDuplicate(*pux, puxm2); CHKERRQ(ierr);        // ux at time n-2
   ierr = VecDuplicate(*pux, puxm3); CHKERRQ(ierr);        // ux at time n-3 
 
-  ierr = VecSet(*pc11, 1500.f); CHKERRQ(ierr);            // c velocity, m/sec
-  ierr = VecSet(*prho, 1000.f); CHKERRQ(ierr);            // kg/m3
+  ierr = VecSet(*pc11, 2.f); CHKERRQ(ierr);            // c velocity, m/sec
+  ierr = VecSet(*prho, 1.f); CHKERRQ(ierr);            // kg/m3
 
 
   /*----------------------------------------------------------------------
     SET MODEL PATRAMETERS
   ------------------------------------------------------------------------*/
   // MODEL SIZE Xmax Ymax Zmax in meters
-  *pxmax = 2000.f; //[m]
-  *pymax = 2000.f;
-  *pzmax = 2000.f;
+  *pxmax = 1.f; //[m]
+  *pymax = 1.f;
+  *pzmax = 1.f;
 
   // GRID STEP DX DY and DZ
   *pdx = *pxmax / *pnx; //[m]
   *pdy = *pymax / *pny;
   *pdz = *pzmax / *pnz;
 
-  PetscScalar cmax, cmin, lambda_max;
+  PetscScalar cmax, cmin, lambda_min;
 
   VecMax(ctx.model.c11, NULL, &cmax);
   VecMin(ctx.model.c11, NULL, &cmin);
@@ -214,11 +224,11 @@ main(int argc, char * args[])
   ctx.src.isrc = (PetscInt) *pnx / 2;
   ctx.src.jsrc = (PetscInt) *pny / 2;
   ctx.src.ksrc = (PetscInt) *pnz / 2;
-  ctx.src.f0 = 10.f; //[Hz]
-  ctx.src.factor = pow(10.f,12); //amplitude
+  ctx.src.f0 = 40.f; //[Hz]
+  ctx.src.factor = pow(10.f,8); //amplitude
   ctx.src.angle_force = 90; // degrees
 
-  lambda_max = cmax / ctx.src.f0;                 // Max wavelength in model
+  lambda_min = cmin / ctx.src.f0;                 // Min wavelength in model
 
   // RECEIVERS
   PetscInt irec[]={ctx.src.isrc, (PetscInt) ctx.src.isrc/2, (PetscInt) ctx.src.isrc/4};
@@ -238,24 +248,25 @@ main(int argc, char * args[])
 
   // OUTPUT
   PetscPrintf(PETSC_COMM_WORLD,"MODEL:\n");
-  PetscPrintf(PETSC_COMM_WORLD,"\t XMAX %f \t DX %f \t NX %i\n",*pxmax, *pdx, *pnx);
-  PetscPrintf(PETSC_COMM_WORLD,"\t YMAX %f \t DY %f \t NY %i\n",*pymax, *pdy, *pny);
-  PetscPrintf(PETSC_COMM_WORLD,"\t ZMAX %f \t DZ %f \t NZ %i\n",*pzmax, *pdz, *pnz);
-  PetscPrintf(PETSC_COMM_WORLD,"\t MAX C \t %f \n", cmax);
-  PetscPrintf(PETSC_COMM_WORLD,"\t MIN C \t %f \n", cmin);
+  PetscPrintf(PETSC_COMM_WORLD,"\t XMAX %f \t DX %f km \t NX %i\n",*pxmax, *pdx, *pnx);
+  PetscPrintf(PETSC_COMM_WORLD,"\t YMAX %f \t DY %f km \t NY %i\n",*pymax, *pdy, *pny);
+  PetscPrintf(PETSC_COMM_WORLD,"\t ZMAX %f \t DZ %f km \t NZ %i\n",*pzmax, *pdz, *pnz);
+  PetscPrintf(PETSC_COMM_WORLD,"\t MAX C \t %f km/s \n", cmax);
+  PetscPrintf(PETSC_COMM_WORLD,"\t MIN C \t %f km/s \n", cmin);
   PetscPrintf(PETSC_COMM_WORLD,"\n");
 
   PetscPrintf(PETSC_COMM_WORLD,"SOURCE:\n");
   PetscPrintf(PETSC_COMM_WORLD,"\t ISRC %i \t JSRC %i \t KSRC %i\n", ctx.src.isrc, ctx.src.jsrc, ctx.src.ksrc);
   PetscPrintf(PETSC_COMM_WORLD,"\t F0 \t %f Hz \n", ctx.src.f0);
-  PetscPrintf(PETSC_COMM_WORLD,"\t MAX Lambda \t %f m \n", lambda_max);
-  PetscPrintf(PETSC_COMM_WORLD,"\t POINTS PER WAVELENGTH \t %f \n", lambda_max/(*pdx));
+  PetscPrintf(PETSC_COMM_WORLD,"\t MIN Lambda \t %f km \n", lambda_min);
+  PetscPrintf(PETSC_COMM_WORLD,"\t POINTS PER WAVELENGTH \t %f \n", lambda_min/(*pdx));
   PetscPrintf(PETSC_COMM_WORLD,"\n");
 
   PetscPrintf(PETSC_COMM_WORLD,"RECEIVERS:\n");
   PetscPrintf(PETSC_COMM_WORLD,"\t NREC \t %i\n", ctx.rec.nrec);
   PetscPrintf(PETSC_COMM_WORLD,"\t IREC \t JREC \t KSREC \n");
-  for (int rr = 0; rr < ctx.rec.nrec; rr++)
+  int rr;
+  for (rr = 0; rr < ctx.rec.nrec; rr++)
   {
     PetscPrintf(PETSC_COMM_WORLD,"\t %i \t %i \t %i \n", ctx.rec.irec[rr], ctx.rec.jrec[rr], ctx.rec.krec[rr]);
   }
@@ -290,8 +301,11 @@ main(int argc, char * args[])
   /*
     TIME LOOP
   */
-  clock_t begin = clock();
-  for (int it  = 1; it <= *pnt; it ++)
+  clock_t begin=clock();
+  clock_t end;
+
+  int it;
+  for (it  = 1; it <= *pnt; it ++)
   {
     ctx.time.it = it;
     ctx.time.t = (PetscScalar) (it-1) * ctx.time.dt;
@@ -304,8 +318,9 @@ main(int argc, char * args[])
     ierr = VecCopy(*pux, *puxm1);   CHKERRQ(ierr);                        // copy vector u to um1
 
 
-    if (((int) it%5) ==0)
+    if ((FOUTPUT==1) && ((int) it%5) ==0)
     { 
+      end = clock();
       ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
 
       VecMax(*pux, NULL, &cmax);
@@ -317,15 +332,17 @@ main(int argc, char * args[])
       VecNorm(*pux,NORM_2,&norm);
       ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
 
-      clock_t end = clock();
+      
       double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
       ierr = PetscPrintf(PETSC_COMM_WORLD, "Elapsed time: \t %f sec \n", time_spent); CHKERRQ(ierr);
 
       char buffer[32];                                 // The filename buffer.
       snprintf(buffer, sizeof(buffer), "./wavefields/tmp_Bvec_%i.m", it);
       ierr = save_Vec_to_m_file(*pux, &buffer); CHKERRQ(ierr);
+      // ierr = save_Vec_to_m_file(*puxm1, &buffer); CHKERRQ(ierr);
 
       ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
+      begin = clock();
     }
   }
 
@@ -344,6 +361,11 @@ main(int argc, char * args[])
 
   ierr = KSPDestroy(&ksp_ux);   CHKERRQ(ierr);
   ierr = DMDestroy(&da);   CHKERRQ(ierr);
+  
+  total_time_end = clock();
+  double time_spent = (double)(total_time_end - total_time_begin) / CLOCKS_PER_SEC;
+  ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_WORLD, "Total time: \t %f sec \n", time_spent); CHKERRQ(ierr);
 
   ierr = PetscFinalize();   CHKERRQ(ierr);
 
@@ -366,9 +388,11 @@ main(int argc, char * args[])
 
 // APPEND VALUE TO A SEISMOGRAM
 PetscErrorCode
-write_seismograms(double ***u ,void *ctx)
+write_seismograms(KSP ksp,PetscScalar ***u ,void *ctx)
 {
   PetscFunctionBegin;
+
+  PetscErrorCode ierr;
 
   ctx_t *c = (ctx_t *) ctx;
   
@@ -380,10 +404,22 @@ write_seismograms(double ***u ,void *ctx)
   PetscInt *jrec = c->rec.jrec;
   PetscInt *krec = c->rec.krec;
 
-  for (int xrec = 0; xrec < nrec; xrec++)
+  DM da;
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr); //Get the DM oject of the KSP
+
+  DMDALocalInfo grid;
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
+ 
+  int xrec;
+  for (xrec = 0; xrec < nrec; xrec++)
   {
-    c->rec.seis[xrec][it-1][0] = t;
-    c->rec.seis[xrec][it-1][1] = u[irec[xrec]][jrec[xrec]][krec[xrec]]; 
+    if ((irec[xrec] > grid.xs) && (irec[xrec] < (grid.xs + grid.xm)) &&
+        (jrec[xrec] > grid.ys) && (jrec[xrec] < (grid.ys + grid.ym)) &&
+        (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
+        {
+          c->rec.seis[xrec][it-1][0] = t;
+          c->rec.seis[xrec][it-1][1] = u[irec[xrec]][jrec[xrec]][krec[xrec]];
+        }
   }
 
   PetscFunctionReturn(0);
@@ -415,15 +451,13 @@ source_term(void * ctx)
 {
   PetscFunctionBegin;
 
-  PetscScalar f0, t, t0, it, a, dt, source_term, factor;
+  PetscScalar f0, t, t0, a, source_term, factor;
   PetscScalar force_x, force_y, force_z, angle_force;
   
   ctx_t *c = (ctx_t *) ctx;
 
   f0 = c->src.f0;
-  it = c->time.it;
   t0 = 1.2f / f0;
-  dt = c->time.dt;
   t = c->time.t;
   factor = c->src.factor;
   angle_force = c->src.angle_force;
@@ -444,25 +478,15 @@ source_term(void * ctx)
   force_y = cos(angle_force * DEGREES_TO_RADIANS) * source_term;
   force_z = sin(angle_force * DEGREES_TO_RADIANS) * source_term;
 
-  // PetscPrintf(PETSC_COMM_WORLD,"fx = %f \n", force_x);
-
-  // debprint(f0);
-  // debprint(it);
-  // debprint(t0);
-  // debprint(dt);
-  // debprint(factor);
-  // debprint(angle_force);
-  // debprint(DEGREES_TO_RADIANS);
-  // debprint(t);
-  // debprint(source_term);
-  // PetscPrintf(PETSC_COMM_WORLD," \n");
-
   c->src.fx = force_x;
   c->src.fy = force_y;
   c->src.fz = force_z;
 
   PetscFunctionReturn(0);
 }
+
+
+
 
 
 // UPDATE RHS OF UX EQUATION
@@ -496,7 +520,8 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
   ierr = DMDAVecGetArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->model.rho, &_rho);   CHKERRQ(ierr);
 
-  write_seismograms(_uxm1, c);
+
+  ierr = write_seismograms(ksp, _uxm1, c); CHKERRQ(ierr);
 
   /*
     Loop over the grid points, and fill b 
@@ -522,7 +547,6 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
         else 
         { 
 
-          f = hx * hy * hz; // Scaling
           if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
           {
             source_term = dt2 / _rho[k][j][i] * (c->src.fx);
@@ -532,7 +556,10 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
             source_term = 0.f;
           }
 
-          f*= 5.f * _uxm1[k][j][i] - 4.f * _uxm2[k][j][i] + 1.f * _uxm3[k][j][i] + source_term;
+          f = hx * hy * hz *
+          (5.f * _uxm1[k][j][i] - 4.f * _uxm2[k][j][i] + 1.f * _uxm3[k][j][i] + source_term);
+
+          // PetscPrintf(PETSC_COMM_WORLD, "%f \n", _uxm1[12][12][12]);
 
           _b[k][j][i] = f;
         }
@@ -541,6 +568,9 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
   }
 
   ierr = DMDAVecRestoreArray(da, b, &_b);   CHKERRQ(ierr);   // Release the resource
+  ierr = DMDAVecRestoreArray(da, c->wf.uxm1, &_uxm1);   CHKERRQ(ierr);   // Release the resource
+  ierr = DMDAVecRestoreArray(da, c->wf.uxm2, &_uxm2);   CHKERRQ(ierr);   // Release the resource
+  ierr = DMDAVecRestoreArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);   // Release the resource
 
   MatNullSpace   nullspace;
   MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
@@ -710,6 +740,9 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
   ierr = MatAssemblyEnd(A ,MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
 
+  ierr = DMDAVecRestoreArray(da, c->model.c11, &c11);   CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArray(da, c->model.rho, &rho);   CHKERRQ(ierr);
+
   PetscFunctionReturn(0);
 }
 
@@ -721,7 +754,6 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
 
 PetscScalar ***f3tensor(PetscInt nrl, PetscInt nrh, PetscInt ncl, PetscInt nch,PetscInt ndl, PetscInt ndh)
 {
-
   PetscFunctionBegin;
 
 	/* allocate a float 3tensor with subscript range m[nrl..nrh][ncl..nch][ndl..ndh]
@@ -773,15 +805,18 @@ save_seismograms_to_txt_files(void *ctx)
 
   PetscInt nrec = c->rec.nrec;
   PetscInt nt = c->time.nt;
-
-  for (int xrec = 0; xrec < nrec; xrec++)
+  
+  int xrec;
+  for (xrec = 0; xrec < nrec; xrec++)
   {
     char buffer[32];
     snprintf(buffer, sizeof(buffer), "./seism/seis_%i_%i_%i_%i.txt", 
             xrec, c->rec.irec[xrec], c->rec.jrec[xrec], c->rec.krec[xrec]);
 
     FILE *fout = fopen(buffer, "wb");     
-    for (int i = 0; i < nt ; i++)
+
+    int i;
+    for (i = 0; i < nt ; i++)
     {
       fprintf(fout, "%f \t %f \n", c->rec.seis[xrec][i][0], c->rec.seis[xrec][i][1]);
     }            

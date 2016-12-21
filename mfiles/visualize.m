@@ -14,8 +14,8 @@ for ii = 1:50
     run(name);
 
     %%
-    dim = int8(round(abs(max(size(Vec_0x84000000_0))))^(1/3));
-    u = reshape(Vec_0x84000000_0, dim, dim, dim);
+    dim = int8(round(abs(max(size(Vec_0x84000004_0))))^(1/3));
+    u = reshape(Vec_0x84000004_0, dim, dim, dim);
 
     % u = resample3Dimage(u, 2);
 

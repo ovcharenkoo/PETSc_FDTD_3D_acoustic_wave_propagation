@@ -12,7 +12,7 @@ all: clean $(PROGS)
 
 
 %.out: %.o chkopts
-	$(CC) -o $@ $< ${PETSC_LIB}
+	$(CC) -g -O0 -o $@ $< ${PETSC_LIB}
 	${RM} *.o
 
 clean::

@@ -1,0 +1,7 @@
+1 Total time: 	 42.407158 sec 
+2 Total time: 	 33.944109 sec 
+3 Total time: 	 27.955190 sec 
+4 Total time: 	 28.781325 sec 
+5 Total time: 	 28.936738 sec 
+6 Total time: 	 30.975005 sec 
+7 Total time: 	 30.730117 sec 

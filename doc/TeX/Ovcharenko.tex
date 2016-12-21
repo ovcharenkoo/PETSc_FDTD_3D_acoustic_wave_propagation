@@ -56,14 +56,14 @@ As a particular example we consider a simplified case, because it is sufficient 
 \section*{3D acoustic wave equation}
 Acoustic wave equation for homogeneous media in strong formulation could be expressed as follows
 \begin{equation}
-\rho \frac{\partial^2 u}{\partial t^2} - c^2 \left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2} + \frac{\partial^2 u}{\partial z^2}\right) = f
+\frac{\partial^2 u}{\partial t^2} - c^2 \left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2} + \frac{\partial^2 u}{\partial z^2}\right) = f
 \end{equation}
 
 We discretize with 2nd order of accuracy both in space and time. Implicit time stepping requires backward time derivative approximation, whereas spacial derivatives are approximated with centered scheme.
 
 \begin{equation}
 \begin{aligned}
-& \rho_{i,j,k} \frac{2 U^{n+1}_{i,j,k} - 5 U^{n}_{i,j,k} + 4 U^{n-1}_{i,j,k} - U^{n-2}_{i,j,k}}{\Delta t^2} = \\
+&\frac{2 U^{n+1}_{i,j,k} - 5 U^{n}_{i,j,k} + 4 U^{n-1}_{i,j,k} - U^{n-2}_{i,j,k}}{\Delta t^2} = \\
 & c^2_{i,j,k} \frac{U^{n+1}_{i+1,j,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i-1,j,k}}{\Delta x^2} +\\
 & c^2_{i,j,k} \frac{U^{n+1}_{i,j+1,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j-1,k}}{\Delta y^2} + \\
 & c^2_{i,j,k} \frac{U^{n+1}_{i,j,k+1} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j,k-1}}{\Delta z^2} + f_{i,j,k}
@@ -74,7 +74,7 @@ Hence,
 \if0
 \begin{equation}
 \begin{aligned}
-2 U^{n+1}_{i,j,k} - 5 U^{n}_{i,j,k} + 4 U^{n-1}_{i,j,k} - U^{n-2}_{i,j,k} = \frac{c^2_{i,j,k} \Delta t^2}{\rho_{i,j,k}} (\\
+2 U^{n+1}_{i,j,k} - 5 U^{n}_{i,j,k} + 4 U^{n-1}_{i,j,k} - U^{n-2}_{i,j,k} = c^2_{i,j,k} \Delta t^2 (\\
 & \frac{U^{n+1}_{i+1,j,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i-1,j,k}}{\Delta x^2} +\\
 & \frac{U^{n+1}_{i,j+1,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j-1,k}}{\Delta y^2} + \\
 & \frac{U^{n+1}_{i,j,k+1} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j,k-1}}{\Delta z^2} )
@@ -83,7 +83,7 @@ Hence,
 
 \begin{equation}
 \begin{aligned}
-2 U^{n+1}_{i,j,k} - \frac{c^2_{i,j,k} \Delta t^2}{\rho_{i,j,k}} (
+2 U^{n+1}_{i,j,k} - c^2_{i,j,k} \Delta t^2 (
 \frac{U^{n+1}_{i+1,j,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i-1,j,k}}{\Delta x^2} +
 \frac{U^{n+1}_{i,j+1,k} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j-1,k}}{\Delta y^2} + \\
 \frac{U^{n+1}_{i,j,k+1} - 2 U^{n+1}_{i,j,k} + U^{n+1}_{i,j,k-1}}{\Delta z^2} ) \\= \\ 5 U^{n}_{i,j,k} - 4 U^{n-1}_{i,j,k} + U^{n-2}_{i,j,k} + f_{i,j,k}
@@ -93,14 +93,14 @@ Hence,
 
 \begin{equation}
 \begin{aligned}
-& U^{n+1}_{i,j,k} \left(2 \Delta x \Delta y \Delta z + 2 \frac{c^2_{i,j,k} \Delta t^2}{\rho_{i,j,k}} \left( \frac{\Delta y \Delta z}{\Delta x} + \frac{\Delta x \Delta z}{\Delta y}+ \frac{\Delta x \Delta y}{\Delta z}\right)\right) + \\
-& U^{n+1}_{i+1,j,k}  \left( -\frac{c^2_{i+1,j,k} \Delta t^2}{\rho_{i+1,j,k}}\ \frac{\Delta y \Delta z}{\Delta x}\right) + \\
-& U^{n+1}_{i-1,j,k}  \left( -\frac{c^2_{i-1,j,k} \Delta t^2}{\rho_{i-1,j,k}}\ \frac{\Delta y \Delta z}{\Delta x}\right) + \\
-& U^{n+1}_{i,j+1,k}  \left( -\frac{c^2_{i,j+1,k} \Delta t^2}{\rho_{i,j+1,k}}\ \frac{\Delta x \Delta z}{\Delta y}\right) + \\
-& U^{n+1}_{i,j-1,k}  \left( -\frac{c^2_{i,j-1,k} \Delta t^2}{\rho_{i,j-1,k}}\ \frac{\Delta x \Delta z}{\Delta y}\right) + \\
-& U^{n+1}_{i,j,k+1}  \left( -\frac{c^2_{i,j,k+1} \Delta t^2}{\rho_{i,j,k+1}}\ \frac{\Delta x \Delta y}{\Delta z}\right) + \\
-& U^{n+1}_{i,j,k-1}  \left( -\frac{c^2_{i,j,k-1} \Delta t^2}{\rho_{i,j,k-1}}\ \frac{\Delta x \Delta y}{\Delta z}\right) = 
-\Delta x \Delta y \Delta z \left( 5 U^{n}_{i,j,k} - 4 U^{n-1}_{i,j,k} + U^{n-2}_{i,j,k} + \frac{\Delta t^2}{\rho_{i,j,k}}f_{i,j,k} \right)
+& U^{n+1}_{i,j,k} \left(2 \Delta x \Delta y \Delta z + 2 c^2_{i,j,k} \Delta t^2 \left( \frac{\Delta y \Delta z}{\Delta x} + \frac{\Delta x \Delta z}{\Delta y}+ \frac{\Delta x \Delta y}{\Delta z}\right)\right) + \\
+& U^{n+1}_{i+1,j,k}  \left( -c^2_{i+1,j,k} \Delta t^2\ \frac{\Delta y \Delta z}{\Delta x}\right) + \\
+& U^{n+1}_{i-1,j,k}  \left( -c^2_{i-1,j,k} \Delta t^2\ \frac{\Delta y \Delta z}{\Delta x}\right) + \\
+& U^{n+1}_{i,j+1,k}  \left( -c^2_{i,j+1,k} \Delta t^2\ \frac{\Delta x \Delta z}{\Delta y}\right) + \\
+& U^{n+1}_{i,j-1,k}  \left( -c^2_{i,j-1,k} \Delta t^2\ \frac{\Delta x \Delta z}{\Delta y}\right) + \\
+& U^{n+1}_{i,j,k+1}  \left( -c^2_{i,j,k+1} \Delta t^2\ \frac{\Delta x \Delta y}{\Delta z}\right) + \\
+& U^{n+1}_{i,j,k-1}  \left( -c^2_{i,j,k-1} \Delta t^2\ \frac{\Delta x \Delta y}{\Delta z}\right) = 
+\Delta x \Delta y \Delta z \left( 5 U^{n}_{i,j,k} - 4 U^{n-1}_{i,j,k} + U^{n-2}_{i,j,k} + \Delta t^2 f_{i,j,k} \right)
 \end{aligned}
 \end{equation}
 

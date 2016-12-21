@@ -12,12 +12,9 @@
 #SBATCH	--output=%A.res
 #SBATCH	--error=%A.err
 
-PETSC_MPIRUN=/Users/ovcharoo/Software/petsc-3.7.3/arch-darwin-c-debug/bin/mpirun
+#PETSC_MPIRUN=/Users/ovcharoo/Software/petsc-3.7.3/arch-darwin-c-debug/bin/mpirun
 
-#echo
-#echo 1D
-#echo
-
+PETSC_MPIRUN=${PETSC_DIR}/${PETSC_ARCH}/bin/mpirun
 
 # mpirun -n 4 ./ps_1D.out -ksp_type cg -pc_type mg -da_refine 2 -ksp_converged_reason -ksp_monitor #-log_view
 
@@ -27,11 +24,12 @@ PETSC_MPIRUN=/Users/ovcharoo/Software/petsc-3.7.3/arch-darwin-c-debug/bin/mpirun
 #echo 3D
 #echo
 
-rm tmp_*
+rm -rf ./wavefields/*
+rm -rf ./seism/*
 #${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -pc_type mg -da_refine 3 -ksp_converged_reason
 
 #${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -da_refine 2 -ksp_converged_reason
 
-#${PETSC_MPIRUN} -n 4 ./p3D1.out -ksp_type cg -pc_type gamg -da_refine 2 -ksp_converged_reason
+#${PETSC_MPIRUN} -n 4 ./p3D_acoustic.out -ksp_type cg -pc_type hypre -da_refine 2 -ksp_converged_reason
 
-${PETSC_MPIRUN} -n 4 ./p3D_acoustic.out -ksp_type cg -da_refine 2 -ksp_converged_reason
+${PETSC_MPIRUN} -n 4 ./p3D_acoustic.out -pc_type asm -pc_asm_overlap 2  -da_refine 1 -ksp_converged_reason

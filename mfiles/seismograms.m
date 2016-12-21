@@ -8,7 +8,7 @@ MANUAL_RUN=1;                    %Compare file by file by pressing Enter ...
 
 c_file=mfilename('fullpath');       %current path to this running script
 c_file=strrep(c_file,mfilename,''); %remove name of script from path to get path to folder
-pathh=[c_file '/seism/'];        %redirect to the folder with data files
+pathh=[c_file '../seism/'];        %redirect to the folder with data files
 fileList=dir(pathh); %get list of files to compare => number must be EVEN (2*n=even)
 % fileList = fileList(~[fileList.isdir]); %remove hidden directories (like . and ..)
 
