@@ -1,1 +1,8 @@
 ./ex5 -pc_type mg -ksp_monitor  -snes_view -pc_mg_levels 3 -pc_mg_galerkin -da_grid_x 17 -da_grid_y 17 -mg_levels_ksp_monitor -snes_monitor -mg_levels_pc_type sor -pc_mg_type full
+
+TO SHAHEEN:
+
+scp -r ~/Dropbox/WORK_HARD/3D_elastic_wp_PETSc/ ovcharoo@shaheen.hpc.kaust.edu.sa:/scratch/ovcharoo/
+
+module load cray-petsc
+module swap PrgEnv-cray PrgEnv-gnu

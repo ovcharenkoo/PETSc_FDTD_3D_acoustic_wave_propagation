@@ -23,7 +23,7 @@ PetscErrorCode save_Vec_to_m_file(Vec, void *);
 PetscErrorCode Save_seismograms_to_txt_files(void *);
 PetscErrorCode source_term(void *);
 PetscErrorCode Write_seismograms(KSP, Vec, void *);
-PetscScalar ***f3tensor(PetscInt, PetscInt, PetscInt, PetscInt,PetscInt, PetscInt);
+PetscScalar    ***f3tensor(PetscInt, PetscInt, PetscInt, PetscInt,PetscInt, PetscInt);
 
 
 // User-defined structures
@@ -129,7 +129,7 @@ main(int argc, char * args[])
   PetscScalar norm;
 
   bool FOUTPUT                = true;
-  bool SAVE_WAVEFIELD_MATLAB  = true;
+  bool SAVE_WAVEFIELD_MATLAB  = false;
 
   clock_t total_time_begin, total_time_end;
   total_time_begin = clock();
@@ -422,16 +422,19 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
   PetscInt *krec = c->rec.krec;
  
   int xrec;
-  PetscScalar  dump;
   for (xrec = 0; xrec < nrec; xrec++)
   {
     if ((irec[xrec] > grid.xs) && (irec[xrec] < (grid.xs + grid.xm)) &&
         (jrec[xrec] > grid.ys) && (jrec[xrec] < (grid.ys + grid.ym)) &&
         (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
         {
+              // PetscPrintf(PETSC_COMM_WORLD, "%i\n %i %i %i \n %i %i %i \n %i %i %i \n \n", nrec, 
+              //                                                     irec[xrec], grid.xs, grid.xs + grid.xm,
+              //                                                     jrec[xrec], grid.ys, grid.ys + grid.ym,
+              //                                                     krec[xrec], grid.zs, grid.zs + grid.zm);
           c->rec.seis[xrec][it-1][0] = t;
           c->rec.seis[xrec][it-1][1] = _u[krec[xrec]][jrec[xrec]][irec[xrec]];
-          // dump = _u[irec[xrec]][jrec[xrec]][krec[xrec]];
+          // ierr = PetscPrintf(PETSC_COMM_WORLD, "!!!!! u \t %f \n", _u[krec[xrec]][jrec[xrec]][irec[xrec]]); CHKERRQ(ierr);
         }
   }
   
