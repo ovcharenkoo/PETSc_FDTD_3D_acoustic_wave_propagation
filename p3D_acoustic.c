@@ -194,7 +194,7 @@ main(int argc, char * args[])
   ierr = VecDuplicate(*pux, puxm2); CHKERRQ(ierr);        // ux at time n-2
   ierr = VecDuplicate(*pux, puxm3); CHKERRQ(ierr);        // ux at time n-3 
 
-  ierr = VecSet(*pc11, 2.f); CHKERRQ(ierr);            // c velocity, m/sec
+  ierr = VecSet(*pc11, 2.0f); CHKERRQ(ierr);            // c velocity, m/sec
   ierr = VecSet(*prho, 1.f); CHKERRQ(ierr);            // kg/m3
 
 
@@ -202,12 +202,12 @@ main(int argc, char * args[])
     SET MODEL PATRAMETERS
   ------------------------------------------------------------------------*/
   // MODEL SIZE Xmax Ymax Zmax in meters
-  *pxmax = 1.f; //[m]
+  *pxmax = 1.f; //[km]
   *pymax = 1.f;
   *pzmax = 1.f;
 
   // GRID STEP DX DY and DZ
-  *pdx = *pxmax / *pnx; //[m]
+  *pdx = *pxmax / *pnx; //[km]
   *pdy = *pymax / *pny;
   *pdz = *pzmax / *pnz;
 
@@ -217,7 +217,8 @@ main(int argc, char * args[])
   VecMin(ctx.model.c11, NULL, &cmin);
 
   // TIME STEPPING PARAMETERS
-  *pdt = *pdx / cmax; //[sec]
+  *pdt =  (*pdx) / cmax; //[sec]
+  // *pdt = 0.001f;
   *ptmax = 0.5f; //[sec]
   *pnt = *ptmax / *pdt;
 
@@ -225,21 +226,40 @@ main(int argc, char * args[])
   ctx.src.isrc = (PetscInt) *pnx / 2;
   ctx.src.jsrc = (PetscInt) *pny / 2;
   ctx.src.ksrc = (PetscInt) *pnz / 2;
-  ctx.src.f0 = 40.f; //[Hz]
+  ctx.src.f0 = 20.f; //[Hz]
   ctx.src.factor = pow(10.f,8); //amplitude
   ctx.src.angle_force = 90; // degrees
 
   lambda_min = cmin / ctx.src.f0;                 // Min wavelength in model
 
   // RECEIVERS
-  PetscInt irec[]={ctx.src.isrc, (PetscInt) ctx.src.isrc/2, (PetscInt) ctx.src.isrc/4};
-  PetscInt jrec[]={ctx.src.jsrc, ctx.src.jsrc, ctx.src.jsrc};
-  PetscInt krec[]={ctx.src.ksrc, ctx.src.ksrc, ctx.src.ksrc}; 
+
+  ctx.rec.nrec = 40;
+
+  // PetscInt irec[]={ctx.src.isrc, (PetscInt) ctx.src.isrc/2, (PetscInt) ctx.src.isrc/4};
+  // PetscInt jrec[]={ctx.src.jsrc, ctx.src.jsrc, ctx.src.jsrc};
+  // PetscInt krec[]={ctx.src.ksrc, ctx.src.ksrc, ctx.src.ksrc}; 
+
+  PetscInt irec[ctx.rec.nrec], *pirec;
+  PetscInt jrec[ctx.rec.nrec], *pjrec;
+  PetscInt krec[ctx.rec.nrec], *pkrec;
+
+  pirec = &irec[0];
+  pjrec = &jrec[0];
+  pkrec = &krec[0];
+
+  int i;
+  for (i = 0; i < ctx.rec.nrec; i++)
+  {
+    *(pirec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.src.isrc) / ctx.rec.nrec;
+    *(pjrec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.src.jsrc) / ctx.rec.nrec;
+    *(pkrec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.src.ksrc) / ctx.rec.nrec;
+  }
   
   ctx.rec.irec = irec;
   ctx.rec.jrec = jrec;
   ctx.rec.krec = krec;
-  ctx.rec.nrec = (PetscInt) sizeof(irec)/sizeof(irec[0]);
+  // ctx.rec.nrec = (PetscInt) sizeof(irec)/sizeof(irec[0]);
 
   PetscScalar ***seis; //Array with seismograms [NREC][NT][2], 2 is for time and displacement colums
   seis = f3tensor(0,ctx.rec.nrec,0,*pnt,0,2);
@@ -248,9 +268,9 @@ main(int argc, char * args[])
 
   // OUTPUT
   PetscPrintf(PETSC_COMM_WORLD,"MODEL:\n");
-  PetscPrintf(PETSC_COMM_WORLD,"\t XMAX %f \t DX %f km \t NX %i\n",*pxmax, *pdx, *pnx);
-  PetscPrintf(PETSC_COMM_WORLD,"\t YMAX %f \t DY %f km \t NY %i\n",*pymax, *pdy, *pny);
-  PetscPrintf(PETSC_COMM_WORLD,"\t ZMAX %f \t DZ %f km \t NZ %i\n",*pzmax, *pdz, *pnz);
+  PetscPrintf(PETSC_COMM_WORLD,"\t XMAX %f \t DX %f km \t NX %i\n", *pxmax, *pdx, *pnx);
+  PetscPrintf(PETSC_COMM_WORLD,"\t YMAX %f \t DY %f km \t NY %i\n", *pymax, *pdy, *pny);
+  PetscPrintf(PETSC_COMM_WORLD,"\t ZMAX %f \t DZ %f km \t NZ %i\n", *pzmax, *pdz, *pnz);
   PetscPrintf(PETSC_COMM_WORLD,"\t MAX C \t %f km/s \n", cmax);
   PetscPrintf(PETSC_COMM_WORLD,"\t MIN C \t %f km/s \n", cmin);
   PetscPrintf(PETSC_COMM_WORLD,"\n");
@@ -265,11 +285,13 @@ main(int argc, char * args[])
   PetscPrintf(PETSC_COMM_WORLD,"RECEIVERS:\n");
   PetscPrintf(PETSC_COMM_WORLD,"\t NREC \t %i\n", ctx.rec.nrec);
   PetscPrintf(PETSC_COMM_WORLD,"\t IREC \t JREC \t KSREC \n");
+
   int rr;
   for (rr = 0; rr < ctx.rec.nrec; rr++)
   {
     PetscPrintf(PETSC_COMM_WORLD,"\t %i \t %i \t %i \n", ctx.rec.irec[rr], ctx.rec.jrec[rr], ctx.rec.krec[rr]);
   }
+
   PetscPrintf(PETSC_COMM_WORLD,"\n");
 
   PetscPrintf(PETSC_COMM_WORLD,"TIME STEPPING: \n");
@@ -337,7 +359,6 @@ main(int argc, char * args[])
       ierr = VecNorm(*pux,NORM_2,&norm); CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
 
-      
       double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
       ierr = PetscPrintf(PETSC_COMM_WORLD, "Elapsed time: \t %f sec \n", time_spent); CHKERRQ(ierr);
 
@@ -421,6 +442,11 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
   PetscInt *jrec = c->rec.jrec;
   PetscInt *krec = c->rec.krec;
  
+  // PetscPrintf(PETSC_COMM_WORLD, " %i %i \n %i %i \n %i %i \n \n", 
+  //                                                     grid.xs, grid.xs + grid.xm,
+  //                                                     grid.ys, grid.ys + grid.ym,
+  //                                                     grid.zs, grid.zs + grid.zm);
+
   int xrec;
   for (xrec = 0; xrec < nrec; xrec++)
   {
@@ -428,13 +454,13 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
         (jrec[xrec] > grid.ys) && (jrec[xrec] < (grid.ys + grid.ym)) &&
         (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
         {
-              // PetscPrintf(PETSC_COMM_WORLD, "%i\n %i %i %i \n %i %i %i \n %i %i %i \n \n", nrec, 
-              //                                                     irec[xrec], grid.xs, grid.xs + grid.xm,
-              //                                                     jrec[xrec], grid.ys, grid.ys + grid.ym,
-              //                                                     krec[xrec], grid.zs, grid.zs + grid.zm);
+  // PetscPrintf(PETSC_COMM_WORLD, "%i\n %i %i %i \n %i %i %i \n %i %i %i \n \n", nrec, 
+  //                                                     irec[xrec], grid.xs, grid.xs + grid.xm,
+  //                                                     jrec[xrec], grid.ys, grid.ys + grid.ym,
+  //                                                     krec[xrec], grid.zs, grid.zs + grid.zm);
           c->rec.seis[xrec][it-1][0] = t;
           c->rec.seis[xrec][it-1][1] = _u[krec[xrec]][jrec[xrec]][irec[xrec]];
-          // ierr = PetscPrintf(PETSC_COMM_WORLD, "!!!!! u \t %f \n", _u[krec[xrec]][jrec[xrec]][irec[xrec]]); CHKERRQ(ierr);
+          // ierr = PetscPrintf(PETSC_COMM_WORLD, "!!!!! %i u \t %f \n", xrec, _u[krec[xrec]][jrec[xrec]][irec[xrec]]); CHKERRQ(ierr);
         }
   }
   

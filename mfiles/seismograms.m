@@ -54,9 +54,9 @@ for i = 1:numfiles
    minvecx = [minvecx minx];
    minvecy = [minvecy miny];
    
-   plot(A(:,2));
+   plot(A(:,2)); title(strrep(fileList(i).name,'_',' '));
    
-%    axvec = 0.1 * [min(minvecx), max(maxvecx), min(minvecy), max(maxvecy)];
+%    axvec = [min(minvecx), max(maxvecx), min(minvecy), max(maxvecy)];
 %    axis(axvec);
    
    drawnow;
