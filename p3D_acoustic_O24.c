@@ -20,7 +20,7 @@
 PetscErrorCode compute_A_ux(KSP, Mat, Mat, void *);
 PetscErrorCode update_b_ux(KSP, Vec, void *);
 PetscErrorCode save_Vec_to_m_file(Vec, void *);
-PetscErrorCode Save_seismograms_to_txt_files(void *);
+PetscErrorCode Save_seismograms_to_txt_files(KSP, void *);
 PetscErrorCode source_term(void *);
 PetscErrorCode Write_seismograms(KSP, Vec, void *);
 PetscScalar    ***f3tensor(PetscInt, PetscInt, PetscInt, PetscInt,PetscInt, PetscInt);
@@ -127,8 +127,9 @@ main(int argc, char * args[])
   PetscInt *pnx, *pny, *pnz, *pnt;
   PetscScalar norm;
 
-  bool FOUTPUT                = true;
-  bool SAVE_WAVEFIELD_MATLAB  = true;
+  bool  FOUTPUT                 = true;
+  bool  SAVE_WAVEFIELD_MATLAB   = false;
+  int   IT_DISPLAY              = 50;
 
   clock_t total_time_begin, total_time_end;
   total_time_begin = clock();
@@ -344,7 +345,7 @@ main(int argc, char * args[])
 
 
 
-    shoot_time = (int) it%10;
+    shoot_time = (int) it%IT_DISPLAY;
     if (FOUTPUT && shoot_time == 0)
     { 
       end = clock();
@@ -374,21 +375,19 @@ main(int argc, char * args[])
     }
   }
 
-  ierr = Save_seismograms_to_txt_files(pctx);   CHKERRQ(ierr);
+  ierr = Save_seismograms_to_txt_files(ksp_ux, pctx);   CHKERRQ(ierr);
 
   /*
     CLEAN ALLOCATIONS AND EXIT
   */
-  ierr = VecDestroy(&b);   CHKERRQ(ierr);
-  ierr = VecDestroy(pux);   CHKERRQ(ierr);
+  ierr = VecDestroy(&b);      CHKERRQ(ierr);
+  ierr = VecDestroy(pux);     CHKERRQ(ierr);
   ierr = VecDestroy(puxm1);   CHKERRQ(ierr);
   ierr = VecDestroy(puxm2);   CHKERRQ(ierr);
   ierr = VecDestroy(puxm3);   CHKERRQ(ierr);
-  // ierr = VecDestroy(pc11);   CHKERRQ(ierr);
-
 
   ierr = KSPDestroy(&ksp_ux);   CHKERRQ(ierr);
-  ierr = DMDestroy(&da);   CHKERRQ(ierr);
+  ierr = DMDestroy(&da);        CHKERRQ(ierr);
   
   total_time_end = clock();
   double time_spent = (double)(total_time_end - total_time_begin) / CLOCKS_PER_SEC;
@@ -876,30 +875,49 @@ PetscScalar ***f3tensor(PetscInt nrl, PetscInt nrh, PetscInt ncl, PetscInt nch,P
 
 
 PetscErrorCode
-Save_seismograms_to_txt_files(void *ctx) 
+Save_seismograms_to_txt_files(KSP ksp, void *ctx) 
 {
   PetscFunctionBegin;
+
+  PetscErrorCode ierr;
   
   ctx_t *c = (ctx_t *) ctx;
 
   PetscInt nrec = c->rec.nrec;
   PetscInt nt = c->time.nt;
+
+  PetscInt *irec = c->rec.irec;
+  PetscInt *jrec = c->rec.jrec;
+  PetscInt *krec = c->rec.krec;
+
+  DM da;
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);           //Get the DM oject of the KSP
+
+  DMDALocalInfo grid;
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
+
+  // ierr = DMDAVecGetArray(da, u, &_u);   CHKERRQ(ierr);
   
   int xrec;
   for (xrec = 0; xrec < nrec; xrec++)
   {
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "./seism/seis_%i_%i_%i_%i.txt", 
-            xrec, c->rec.irec[xrec], c->rec.jrec[xrec], c->rec.krec[xrec]);
+    if ((irec[xrec] >= grid.xs) && (irec[xrec] <= (grid.xs + grid.xm)) &&
+        (jrec[xrec] >= grid.ys) && (jrec[xrec] <= (grid.ys + grid.ym)) &&
+        (krec[xrec] >= grid.zs) && (krec[xrec] <= (grid.zs + grid.zm)))
+        {
+          char buffer[32];
+          snprintf(buffer, sizeof(buffer), "./seism/seis_%i_%i_%i_%i.txt", 
+                  xrec, c->rec.irec[xrec], c->rec.jrec[xrec], c->rec.krec[xrec]);
 
-    FILE *fout = fopen(buffer, "wb");     
+          FILE *fout = fopen(buffer, "wb");     
 
-    int i;
-    for (i = 0; i < nt ; i++)
-    {
-      fprintf(fout, "%f \t %f \n", c->rec.seis[xrec][i][0], c->rec.seis[xrec][i][1]);
-    }            
-    fclose(fout); 
+          int i;
+          for (i = 0; i < nt ; i++)
+          {
+            fprintf(fout, "%f \t %f \n", c->rec.seis[xrec][i][0], c->rec.seis[xrec][i][1]);
+          }            
+          fclose(fout); 
+        }
   }
 
   PetscFunctionReturn(0);
