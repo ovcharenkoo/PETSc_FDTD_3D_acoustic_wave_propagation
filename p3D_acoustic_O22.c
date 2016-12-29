@@ -50,8 +50,7 @@ typedef struct {
   PetscScalar ymin;
   PetscScalar zmax;
   PetscScalar zmin;
-  Vec c11;
-  Vec rho;
+  PetscScalar c11;
 } model_par;
 
 typedef struct{
@@ -122,14 +121,14 @@ main(int argc, char * args[])
   Vec *puxm2;
   Vec *puxm3;
 
-  Vec *pc11, *prho;
+  PetscScalar *pc11;
   PetscScalar *pdx, *pdy, *pdz, *pxmax, *pymax, *pzmax;
   PetscScalar *pt0, *pdt, *ptmax;
   PetscInt *pnx, *pny, *pnz, *pnt;
   PetscScalar norm;
 
   bool FOUTPUT                = true;
-  bool SAVE_WAVEFIELD_MATLAB  = false;
+  bool SAVE_WAVEFIELD_MATLAB  = true;
 
   clock_t total_time_begin, total_time_end;
   total_time_begin = clock();
@@ -166,7 +165,6 @@ main(int argc, char * args[])
   pzmax = &ctx.model.zmax;
   
   pc11 = &ctx.model.c11;
-  prho = &ctx.model.rho;
 
   pnt = &ctx.time.nt;
   pt0 = &ctx.time.t0;
@@ -188,15 +186,14 @@ main(int argc, char * args[])
   ierr = DMCreateGlobalVector(da, pux);   CHKERRQ(ierr);  // Create a global ux vector derived from the DM object
   
   ierr = VecDuplicate(*pux, &b);   CHKERRQ(ierr);         // RHS of the system
-  ierr = VecDuplicate(*pux, pc11);   CHKERRQ(ierr);       // Duplicate vectors from grid object to each vector component
-  ierr = VecDuplicate(*pux, prho);   CHKERRQ(ierr); 
+  // ierr = VecDuplicate(*pux, pc11);   CHKERRQ(ierr);       // Duplicate vectors from grid object to each vector component
+
   ierr = VecDuplicate(*pux, puxm1); CHKERRQ(ierr);        // ux at time n-1
   ierr = VecDuplicate(*pux, puxm2); CHKERRQ(ierr);        // ux at time n-2
   ierr = VecDuplicate(*pux, puxm3); CHKERRQ(ierr);        // ux at time n-3 
 
-  ierr = VecSet(*pc11, 2.0f); CHKERRQ(ierr);            // c velocity, m/sec
-  ierr = VecSet(*prho, 1.f); CHKERRQ(ierr);            // kg/m3
-
+  // ierr = VecSet(*pc11, 2.0f); CHKERRQ(ierr);            // c velocity, m/sec
+  *pc11 = 2.0f;
 
   /*----------------------------------------------------------------------
     SET MODEL PATRAMETERS
@@ -213,8 +210,11 @@ main(int argc, char * args[])
 
   PetscScalar cmax, cmin, lambda_min;
 
-  VecMax(ctx.model.c11, NULL, &cmax);
-  VecMin(ctx.model.c11, NULL, &cmin);
+  // VecMax(ctx.model.c11, NULL, &cmax);
+  // VecMin(ctx.model.c11, NULL, &cmin);
+
+  cmin = *pc11;
+  cmax = *pc11;
 
   // TIME STEPPING PARAMETERS
   *pdt =  (*pdx) / cmax; //[sec]
@@ -384,8 +384,8 @@ main(int argc, char * args[])
   ierr = VecDestroy(puxm1);   CHKERRQ(ierr);
   ierr = VecDestroy(puxm2);   CHKERRQ(ierr);
   ierr = VecDestroy(puxm3);   CHKERRQ(ierr);
-  ierr = VecDestroy(pc11);   CHKERRQ(ierr);
-  ierr = VecDestroy(prho);   CHKERRQ(ierr);
+  // ierr = VecDestroy(pc11);   CHKERRQ(ierr);
+
 
   ierr = KSPDestroy(&ksp_ux);   CHKERRQ(ierr);
   ierr = DMDestroy(&da);   CHKERRQ(ierr);
@@ -450,9 +450,9 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
   int xrec;
   for (xrec = 0; xrec < nrec; xrec++)
   {
-    if ((irec[xrec] > grid.xs) && (irec[xrec] < (grid.xs + grid.xm)) &&
-        (jrec[xrec] > grid.ys) && (jrec[xrec] < (grid.ys + grid.ym)) &&
-        (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
+    if ((irec[xrec] >= grid.xs) && (irec[xrec] <= (grid.xs + grid.xm)) &&
+        (jrec[xrec] >= grid.ys) && (jrec[xrec] <= (grid.ys + grid.ym)) &&
+        (krec[xrec] >= grid.zs) && (krec[xrec] <= (grid.zs + grid.zm)))
         {
   // PetscPrintf(PETSC_COMM_WORLD, "%i\n %i %i %i \n %i %i %i \n %i %i %i \n \n", nrec, 
   //                                                     irec[xrec], grid.xs, grid.xs + grid.xm,
@@ -552,18 +552,24 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
   DMDALocalInfo grid;
   ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
 
-  double hx = (1.f / (double) (grid.mx - 1));
-  double hy = (1.f / (double) (grid.my - 1));
-  double hz = (1.f / (double) (grid.mz - 1));
+  // double hx = (1.f / (double) (grid.mx - 1));
+  // double hy = (1.f / (double) (grid.my - 1));
+  // double hz = (1.f / (double) (grid.mz - 1));
+
+  PetscScalar hx = c->model.dx;
+  PetscScalar hy = c->model.dy;
+  PetscScalar hz = c->model.dz;
   
   double *** _b;
-  double *** _uxm1, ***_uxm2, ***_uxm3, ***_rho;
+  // double *** _uxm1, ***_uxm2, ***_uxm3, ***_rho;
+  double *** _uxm1, ***_uxm2, ***_uxm3;
+  
 
   ierr = DMDAVecGetArray(da, b, &_b);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->wf.uxm1, &_uxm1);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->wf.uxm2, &_uxm2);   CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);
-  ierr = DMDAVecGetArray(da, c->model.rho, &_rho);   CHKERRQ(ierr);
+
 
   /*
     Loop over the grid points, and fill b 
@@ -590,7 +596,7 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
         { 
           if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
           {
-            source_term = dt2 / _rho[k][j][i] * (c->src.fx);
+            source_term = dt2 * (c->src.fx);
           }
           else
           {
@@ -636,7 +642,8 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   PetscErrorCode ierr;
   PetscScalar v[7], hx, hy, hz, hyhzdhx, hxhzdhy, hxhydhz;
   PetscScalar dt, dt2;
-  double ***rho, ***c11;
+  // double ***rho, ***c11;
+  PetscScalar c11, c112;  
   PetscInt n;
   DM da;
   DMDALocalInfo grid;
@@ -648,15 +655,19 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);   // Get the DMDA object
   ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);   // Get the grid information
 
-  ierr = DMDAVecGetArray(da, c->model.c11, &c11);   CHKERRQ(ierr);
-  ierr = DMDAVecGetArray(da, c->model.rho, &rho);   CHKERRQ(ierr);
-  
+  // ierr = DMDAVecGetArray(da, c->model.c11, &c11);   CHKERRQ(ierr);
+  c11 = c->model.c11;
+  c112 = pow(c11, 2);
+
   dt = c->time.dt;
   dt2 = dt * dt;
 
-  hx = (1.f / (double) (grid.mx - 1));
-  hy = (1.f / (double) (grid.my - 1));
-  hz = (1.f / (double) (grid.mz - 1));
+  // hx = (1.f / (double) (grid.mx - 1));
+  // hy = (1.f / (double) (grid.my - 1));
+  // hz = (1.f / (double) (grid.mz - 1));
+  hx = c->model.dx;
+  hy = c->model.dy;
+  hz = c->model.dz;
 
   hyhzdhx = hy * hz / hx;
   hxhzdhy = hx * hz / hy;
@@ -691,7 +702,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
         /* Interior nodes in the domain (\Omega) */
         else 
         {
-          v[0] = pow(c11[k][j][i],2) * dt2/rho[k][j][i] * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
+          v[0] = c112 * dt2 * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
         // If neighbor is not a known boundary value
         // then we put an entry
 
@@ -702,7 +713,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i - 1;
           idxn[n].k = k;
 
-          v[n] = - pow(c11[k][j][i],2) *  dt2/rho[k][j][i] * hyhzdhx; // Fill with the value
+          v[n] = - c112 *  dt2 * hyhzdhx; // Fill with the value
           
           n++; // One column added
         }
@@ -713,7 +724,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i + 1;
           idxn[n].k = k;
 
-          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hyhzdhx;  // Fill with the value
+          v[n] = - c112 * dt2 * hyhzdhx;  // Fill with the value
 
           n++; // One column added
         }
@@ -724,7 +735,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
+          v[n] = - c112 * dt2 * hxhzdhy; // Fill with the value
   
           n++; // One column added
         }
@@ -735,7 +746,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhzdhy; // Fill with the value
+          v[n] = - c112 * dt2 * hxhzdhy; // Fill with the value
 
           n++; // One column added
         }
@@ -747,7 +758,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k - 1;
 
-          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
+          v[n] = - c112 * dt2 * hxhydhz; // Fill with the value
 
           n++; // One column added
         }
@@ -759,7 +770,7 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i;
           idxn[n].k = k + 1;
 
-          v[n] = - pow(c11[k][j][i],2) * dt2/rho[k][j][i] * hxhydhz; // Fill with the value
+          v[n] = - c112 * dt2 * hxhydhz; // Fill with the value
 
           n++; // One column added
         }
@@ -779,8 +790,8 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
   ierr = MatAssemblyEnd(A ,MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
 
-  ierr = DMDAVecRestoreArray(da, c->model.c11, &c11);   CHKERRQ(ierr);
-  ierr = DMDAVecRestoreArray(da, c->model.rho, &rho);   CHKERRQ(ierr);
+  // ierr = DMDAVecRestoreArray(da, c->model.c11, &c11);   CHKERRQ(ierr);
+  // ierr = DMDAVecRestoreArray(da, c->model.rho, &rho);   CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
 }

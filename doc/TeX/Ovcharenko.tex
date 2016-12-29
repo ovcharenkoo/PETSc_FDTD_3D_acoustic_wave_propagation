@@ -104,4 +104,34 @@ Hence,
 \end{aligned}
 \end{equation}
 
+4th order:
+\begin{equation}
+\begin{aligned}
+&\frac{2 U^{n+1}_{i,j,k} - 5 U^{n}_{i,j,k} + 4 U^{n-1}_{i,j,k} - U^{n-2}_{i,j,k}}{\Delta t^2} = \\
+& c^2_{i,j,k} \frac{-U^{n+1}_{i+2,j,k} + 16 U^{n+1}_{i+1,j,k} - 30 U^{n+1}_{i,j,k} + 16 U^{n+1}_{i-1,j,k} - U^{n+1}_{i-2,j,k}}{12\Delta x^2} +\\
+& c^2_{i,j,k} \frac{-U^{n+1}_{i,j+2,k} + 16 U^{n+1}_{i,j+2,k} - 30 U^{n+1}_{i,j,k} + 16 U^{n+1}_{i,j-1,k} - U^{n+1}_{i,j-2,k}}{12\Delta y^2} +\\
+& c^2_{i,j,k} \frac{-U^{n+1}_{i,j,k+2} + 16 U^{n+1}_{i,j,k+1} - 30 U^{n+1}_{i,j,k} + 16 U^{n+1}_{i,j,k-1} - U^{n+1}_{i,j,k-2}}{12\Delta z^2} +\\
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+& U^{n+1}_{i,j,k} \left(2 \Delta x \Delta y \Delta z + 30\ c^2_{i,j,k} \Delta t^2 \left( \frac{\Delta y \Delta z}{12 \Delta x} + \frac{\Delta x \Delta z}{12 \Delta y}+ \frac{\Delta x \Delta y}{12 \Delta z}\right)\right) + \\
+& U^{n+1}_{i+2,j,k}  \left(c^2_{i+2,j,k} \Delta t^2\ \frac{\Delta y \Delta z}{12 \Delta x}\right) + \\
+& U^{n+1}_{i+1,j,k}  \left( -16\ c^2_{i+1,j,k} \Delta t^2\ \frac{\Delta y \Delta z}{12 \Delta x}\right) + \\
+& U^{n+1}_{i-1,j,k}  \left( -16\ c^2_{i-1,j,k} \Delta t^2\ \frac{\Delta y \Delta z}{12 \Delta x}\right) + \\
+& U^{n+1}_{i-2,j,k}  \left(c^2_{i-2,j,k} \Delta t^2\ \frac{\Delta y \Delta z}{12 \Delta x}\right) + \\
+& U^{n+1}_{i,j+2,k}  \left(c^2_{i,j+2,k} \Delta t^2\ \frac{\Delta x \Delta z}{12 \Delta y}\right) + \\
+& U^{n+1}_{i,j+1,k}  \left( -16\ c^2_{i,j+1,k} \Delta t^2\ \frac{\Delta x \Delta z}{12 \Delta y}\right) + \\
+& U^{n+1}_{i,j-1,k}  \left( -16\ c^2_{i,j-1,k} \Delta t^2\ \frac{\Delta x \Delta z}{12 \Delta y}\right) + \\
+& U^{n+1}_{i,j-2,k}  \left(c^2_{i,j-2,k} \Delta t^2\ \frac{\Delta x \Delta z}{12 \Delta y}\right) + \\
+& U^{n+1}_{i,j,k+2}  \left(c^2_{i,j,k+2} \Delta t^2\ \frac{\Delta x \Delta y}{12 \Delta z}\right) + \\
+& U^{n+1}_{i,j,k+1}  \left( -16\ c^2_{i,j,k+1} \Delta t^2\ \frac{\Delta x \Delta y}{12 \Delta z}\right) + \\
+& U^{n+1}_{i,j,k-1}  \left( -16\ c^2_{i,j,k-1} \Delta t^2\ \frac{\Delta x \Delta y}{12 \Delta z}\right) + \\
+& U^{n+1}_{i,j,k-2}  \left(c^2_{i,j,k-2} \Delta t^2\ \frac{\Delta x \Delta y}{12 \Delta z}\right) = \\
+& \Delta x \Delta y \Delta z \left( 5 U^{n}_{i,j,k} - 4 U^{n-1}_{i,j,k} + U^{n-2}_{i,j,k} + \Delta t^2 f_{i,j,k} \right)
+\end{aligned}
+\end{equation}
+
+
 \end{document}

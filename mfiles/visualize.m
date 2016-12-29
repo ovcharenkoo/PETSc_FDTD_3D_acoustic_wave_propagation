@@ -9,6 +9,9 @@
 clear all;
 close all;
 
+h1 = figure;
+WinOnTop(h1);
+
 for ii = 1:50
     name = ['../wavefields/tmp_Bvec_' num2str(ii*10)];
     run(name);
@@ -42,7 +45,7 @@ for ii = 1:50
     kk = 0.01;
     clf; patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha','flat','FaceVertexAlphaData',double(C > kk * max(C)));
     % patch('Faces',F,'Vertices',V,'FaceColor','flat','CData',C,'EdgeColor','none','FaceAlpha',0.5);
-    axis equal; view(3); axis tight; axis vis3d; grid off; colorbar; title(num2str(ii));
+    axis equal; view(3); axis tight; axis vis3d; grid off; colorbar; title(num2str(ii)); drawnow;
 
     %%
 
@@ -50,5 +53,5 @@ for ii = 1:50
     % % plot3(x, y, z, 'k.');
     % scatter3(x, y, z,'o','filled');
 %     input('?');
-pause(1)
+% pause(1)
 end
