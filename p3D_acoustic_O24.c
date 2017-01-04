@@ -176,7 +176,7 @@ main(int argc, char * args[])
     CREATE DMDA OBJECT. MESH
   */
   ierr = DMDACreate3d(comm, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,  // Create mesh
-                      DMDA_STENCIL_STAR, -25, -25, -25, PETSC_DECIDE, PETSC_DECIDE,
+                      DMDA_STENCIL_STAR, -32, -32, -32, PETSC_DECIDE, PETSC_DECIDE,
                       PETSC_DECIDE, 1, 2, NULL, NULL, NULL, &da);   CHKERRQ(ierr);
 
   ierr = DMDAGetInfo(da,0,pnx, pny, pnz, 0,0,0,0,0,0,0,0,0);  CHKERRQ(ierr); // Get NX, Ny, NZ
@@ -187,22 +187,23 @@ main(int argc, char * args[])
   ierr = DMCreateGlobalVector(da, pux);   CHKERRQ(ierr);  // Create a global ux vector derived from the DM object
   
   ierr = VecDuplicate(*pux, &b);   CHKERRQ(ierr);         // RHS of the system
-  // ierr = VecDuplicate(*pux, pc11);   CHKERRQ(ierr);       // Duplicate vectors from grid object to each vector component
-
   ierr = VecDuplicate(*pux, puxm1); CHKERRQ(ierr);        // ux at time n-1
   ierr = VecDuplicate(*pux, puxm2); CHKERRQ(ierr);        // ux at time n-2
   ierr = VecDuplicate(*pux, puxm3); CHKERRQ(ierr);        // ux at time n-3 
 
-  // ierr = VecSet(*pc11, 2.0f); CHKERRQ(ierr);            // c velocity, m/sec
-  *pc11 = 2.0f;
+  *pc11 = 3.5f;
 
   /*----------------------------------------------------------------------
     SET MODEL PATRAMETERS
   ------------------------------------------------------------------------*/
   // MODEL SIZE Xmax Ymax Zmax in meters
-  *pxmax = 1.f; //[km]
-  *pymax = 1.f;
-  *pzmax = 1.f;
+  *pxmax = 8.f; //[km]
+  *pymax = 8.f;
+  *pzmax = 8.f;
+
+  // *pxmax = 0.512f; //[km]
+  // *pymax = 0.512f;
+  // *pzmax = 0.512f;
 
   // GRID STEP DX DY and DZ
   *pdx = *pxmax / *pnx; //[km]
@@ -211,23 +212,22 @@ main(int argc, char * args[])
 
   PetscScalar cmax, cmin, lambda_min;
 
-  // VecMax(ctx.model.c11, NULL, &cmax);
-  // VecMin(ctx.model.c11, NULL, &cmin);
-
   cmin = *pc11;
   cmax = *pc11;
 
   // TIME STEPPING PARAMETERS
   *pdt =  (*pdx) / cmax; //[sec]
   // *pdt = 0.001f;
-  *ptmax = 0.5f; //[sec]
+  // *ptmax = 2.f; //[sec]
+  *ptmax = 1.f; //[sec]  
   *pnt = *ptmax / *pdt;
 
   // SOURCE PARAMETERS
   ctx.src.isrc = (PetscInt) *pnx / 2;
   ctx.src.jsrc = (PetscInt) *pny / 2;
   ctx.src.ksrc = (PetscInt) *pnz / 2;
-  ctx.src.f0 = 20.f; //[Hz]
+  ctx.src.f0 = 10.f; //[Hz]
+  // ctx.src.f0 = 50.f; //[Hz]
   ctx.src.factor = pow(10.f,8); //amplitude
   ctx.src.angle_force = 90; // degrees
 
@@ -449,9 +449,9 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
   int xrec;
   for (xrec = 0; xrec < nrec; xrec++)
   {
-    if ((irec[xrec] >= grid.xs) && (irec[xrec] <= (grid.xs + grid.xm)) &&
-        (jrec[xrec] >= grid.ys) && (jrec[xrec] <= (grid.ys + grid.ym)) &&
-        (krec[xrec] >= grid.zs) && (krec[xrec] <= (grid.zs + grid.zm)))
+    if ((irec[xrec] > grid.xs) && (irec[xrec] < (grid.xs + grid.xm)) &&
+        (jrec[xrec] > grid.ys) && (jrec[xrec] < (grid.ys + grid.ym)) &&
+        (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
         {
   // PetscPrintf(PETSC_COMM_WORLD, "%i\n %i %i %i \n %i %i %i \n %i %i %i \n \n", nrec, 
   //                                                     irec[xrec], grid.xs, grid.xs + grid.xm,
@@ -906,8 +906,8 @@ Save_seismograms_to_txt_files(KSP ksp, void *ctx)
         (krec[xrec] >= grid.zs) && (krec[xrec] <= (grid.zs + grid.zm)))
         {
           char buffer[32];
-          snprintf(buffer, sizeof(buffer), "./seism/seis_%i_%i_%i_%i.txt", 
-                  xrec, c->rec.irec[xrec], c->rec.jrec[xrec], c->rec.krec[xrec]);
+          snprintf(buffer, sizeof(buffer), "./seism/seis_%i_%i_%i_%i_%i_%i.txt", 
+          xrec, c->rec.irec[xrec], c->rec.jrec[xrec], c->rec.krec[xrec], (int) c->src.f0, (int) c-> model.xmax);
 
           FILE *fout = fopen(buffer, "wb");     
 

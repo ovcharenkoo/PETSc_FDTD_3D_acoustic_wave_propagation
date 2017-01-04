@@ -25,4 +25,6 @@ rm -rf ./seism/*
 #${PETSC_MPIRUN} -n 4 ./p3D_acoustic_O24.out -pc_type asm -pc_asm_overlap 2 -sub_pc_type ilu  -da_refine 2 -ksp_converged_reason
 
 
-${PETSC_MPIRUN} -n 27 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_refine 3 -ksp_converged_reason
+${PETSC_MPIRUN} -n 32 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_refine 4 -ksp_converged_reason
+
+#${PETSC_MPIRUN} -n 32 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_grid_x 510 -da_grid_y 510 -da_grid_z 510 -ksp_converged_reason

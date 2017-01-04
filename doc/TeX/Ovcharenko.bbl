@@ -1,0 +1,91 @@
+\begin{thebibliography}{13}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Chu and Stoffa(2012)]{chu2012implicit}
+Chunlei Chu and Paul~L Stoffa.
+\newblock Implicit finite-difference simulations of seismic wave propagation.
+\newblock \emph{Geophysics}, 77\penalty0 (2):\penalty0 T57--T67, 2012.
+
+\bibitem[Chu et~al.(2010)Chu, Stoffa, et~al.]{chu2010frequency}
+Chunlei Chu, Paul~L Stoffa, et~al.
+\newblock Frequency domain modeling using implicit spatial finite difference
+  operators.
+\newblock In \emph{2010 SEG Annual Meeting}. Society of Exploration
+  Geophysicists, 2010.
+
+\bibitem[Courant et~al.(1928)Courant, Friedrichs, and
+  Lewy]{courant1928partiellen}
+Richard Courant, Kurt Friedrichs, and Hans Lewy.
+\newblock {\"U}ber die partiellen differenzengleichungen der mathematischen
+  physik.
+\newblock \emph{Mathematische annalen}, 100\penalty0 (1):\penalty0 32--74,
+  1928.
+
+\bibitem[Geller et~al.(2005)Geller, Hirabayashi, and
+  Mizutani]{geller2005comparison}
+Robert~J Geller, Nobuyasu Hirabayashi, and Hiromitsu Mizutani.
+\newblock A comparison of staggered-grid, conventional one-step, and optimally
+  accurate finite-difference schemes for computing synthetic seismograms.
+\newblock \emph{Geophysics}, 2005.
+
+\bibitem[Komatitsch and Tromp(1999)]{komatitsch1999introduction}
+Dimitri Komatitsch and Jeroen Tromp.
+\newblock Introduction to the spectral element method for three-dimensional
+  seismic wave propagation.
+\newblock \emph{Geophysical journal international}, 139\penalty0 (3):\penalty0
+  806--822, 1999.
+
+\bibitem[Kosloff et~al.(2010)Kosloff, Pestana, and
+  Tal-Ezer]{kosloff2010acoustic}
+Dan Kosloff, Reynam~C Pestana, and Hillel Tal-Ezer.
+\newblock Acoustic and elastic numerical wave simulations by recursive spatial
+  derivative operators.
+\newblock \emph{Geophysics}, 75\penalty0 (6):\penalty0 T167--T174, 2010.
+
+\bibitem[Kosloff and Baysal(1982)]{kosloff1982forward}
+Dan~D Kosloff and Edip Baysal.
+\newblock Forward modeling by a fourier method.
+\newblock \emph{Geophysics}, 47\penalty0 (10):\penalty0 1402--1412, 1982.
+
+\bibitem[Liu and Sen(2009)]{liu2009practical}
+Yang Liu and Mrinal~K Sen.
+\newblock A practical implicit finite-difference method: Examples from seismic
+  modelling.
+\newblock \emph{Journal of Geophysics and Engineering}, 6\penalty0
+  (3):\penalty0 231, 2009.
+
+\bibitem[Moczo et~al.(2007)Moczo, Robertsson, and Eisner]{moczo2007finite}
+Peter Moczo, Johan~OA Robertsson, and Leo Eisner.
+\newblock The finite-difference time-domain method for modeling of seismic wave
+  propagation.
+\newblock \emph{Advances in Geophysics}, 48:\penalty0 421--516, 2007.
+
+\bibitem[Saenger et~al.(2000)Saenger, Gold, and Shapiro]{saenger2000modeling}
+Erik~H Saenger, Norbert Gold, and Serge~A Shapiro.
+\newblock Modeling the propagation of elastic waves using a modified
+  finite-difference grid.
+\newblock \emph{Wave motion}, 31\penalty0 (1):\penalty0 77--92, 2000.
+
+\bibitem[Strang and Fix(1973)]{strang1973analysis}
+Gilbert Strang and George~J Fix.
+\newblock \emph{An analysis of the finite element method}, volume 212.
+\newblock Prentice-hall Englewood Cliffs, NJ, 1973.
+
+\bibitem[Virieux(1984)]{Virieux1984}
+Jean Virieux.
+\newblock Sh-wave propagation in heterogeneous media; velocity-stress
+  finite-difference method.
+\newblock \emph{Geophysics}, 49\penalty0 (11):\penalty0 1933 -- 1942, 1984.
+\newblock ISSN 00168033.
+
+\bibitem[Virieux(1986)]{Virieux1986}
+Jean Virieux.
+\newblock P-sv wave propagation in heterogeneous media: Velocity-stress
+  finite-difference method.
+\newblock \emph{Geophysics}, 51\penalty0 (4):\penalty0 889--901, 1986.
+
+\end{thebibliography}

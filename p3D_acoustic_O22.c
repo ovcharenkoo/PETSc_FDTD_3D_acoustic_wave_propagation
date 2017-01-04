@@ -227,7 +227,7 @@ main(int argc, char * args[])
   ctx.src.isrc = (PetscInt) *pnx / 2;
   ctx.src.jsrc = (PetscInt) *pny / 2;
   ctx.src.ksrc = (PetscInt) *pnz / 2;
-  ctx.src.f0 = 20.f; //[Hz]
+  ctx.src.f0 = 40.f; //[Hz]
   ctx.src.factor = pow(10.f,8); //amplitude
   ctx.src.angle_force = 90; // degrees
 
