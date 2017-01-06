@@ -10,7 +10,7 @@ c_file=mfilename('fullpath');       %current path to this running script
 c_file=strrep(c_file,mfilename,''); %remove name of script from path to get path to folder
 pathh=[c_file '../seism/'];        %redirect to the folder with data files
 fileList=dir(pathh); %get list of files to compare => number must be EVEN (2*n=even)
-% fileList = fileList(~[fileList.isdir]); %remove hidden directories (like . and ..)
+fileList = fileList(~[fileList.isdir]); %remove hidden directories (like . and ..)
 
 DSStore = find(strcmp({fileList.name},'.DS_Store'));     % Remove MAC OS files
 if DSStore > 0  
@@ -59,9 +59,8 @@ for i = 1:numfiles
 %    axvec = [min(minvecx), max(maxvecx), min(minvecy), max(maxvecy)];
 %    axis(axvec);
 
-   if i>=2
-       D(:,i-1)=A(:,2);
-   end
+    D(:,i)=A(:,2);
+
    
    drawnow;
    if MANUAL_RUN
@@ -70,3 +69,11 @@ for i = 1:numfiles
 
     
 end
+
+%%
+NO=19;
+close all; plot(D(:,NO)/max(D(:,NO)),'b','LineWidth',2);
+
+
+%%
+dlmwrite('../doc/TeX/data/P20hz512PPWL10.txt',D(:,19));

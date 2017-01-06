@@ -10,3 +10,8 @@ seis_*
 *.aux
 *.log
 *.gz
+*.png
+*.eps
+*.pdf
+P*.txt
+S*.txt

@@ -17,14 +17,18 @@
 PETSC_MPIRUN=${PETSC_DIR}/${PETSC_ARCH}/bin/mpirun
 
 
-rm -rf ./wavefields/*
-rm -rf ./seism/*
+rm -rf ./wavefields/tmp*
+rm -rf ./seism/seis*
 
 #${PETSC_MPIRUN} -n 4 ./p3D_acoustic_O24.out -da_refine 1
 
-#${PETSC_MPIRUN} -n 4 ./p3D_acoustic_O24.out -pc_type asm -pc_asm_overlap 2 -sub_pc_type ilu  -da_refine 2 -ksp_converged_reason
+${PETSC_MPIRUN} -n 4 ./p3D_acoustic_O24.out -pc_type asm -pc_asm_overlap 2 -sub_pc_type ilu  -da_refine 2 -ksp_converged_reason
 
 
-${PETSC_MPIRUN} -n 32 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_refine 4 -ksp_converged_reason
+#${PETSC_MPIRUN} -n 32 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_refine 4 -ksp_converged_reason
+
+#${PETSC_MPIRUN} -n 32 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_refine 2 -ksp_converged_reason -f0 20 | tee ./seism/seis_report.txt
+
+#${PETSC_MPIRUN} -n 32 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_refine 2 -ksp_converged_reason -f0 10 -tmax 2 | tee ./seism/seis_report.txt
 
 #${PETSC_MPIRUN} -n 32 ./p3D_acoustic_O24.out -pc_type  asm -pc_asm_overlap 2 -sub_pc_type ilu -da_grid_x 510 -da_grid_y 510 -da_grid_z 510 -ksp_converged_reason
