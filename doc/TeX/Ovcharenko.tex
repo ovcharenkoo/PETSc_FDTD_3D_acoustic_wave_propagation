@@ -178,7 +178,7 @@ In case of homogeneous isotropic media, matrix $A$ will be symmetric and positiv
 
 \section*{Results and Significance}
 
-We use SOFI3D\_acoustic as an explicit solver. It solves acoustic wave equation on staggered grid in velocity-stress formulation with FD approximation in time domain. The code is written with C and provides accuracy of $O(2,4)$. Simulation model: cube side 8km, propagation velocity $c=3.5\ km/s$. Source: Ricker wavelet at center of the cube with dominant frequency $f_0=20\ Hz$. Time step is chosen such that for implicit method CFL number = 1, for explicit CFL number = 0.5. Resulting wavefield example is given on Figures~\ref{fig:step70}-\ref{fig:step70s}.
+We use SOFI3D\_acoustic as an explicit solver. It solves acoustic wave equation on staggered grid in velocity-stress formulation with FD approximation in time domain. The code is written with C and provides accuracy of $O(2,4)$. Simulation model: cube side 8km, propagation velocity $c=3.5\ km/s$. Source: Ricker wavelet at center of the cube with dominant frequency $f_0=20\ Hz$. Time step is chosen such that for implicit method CFL number = 1, for explicit CFL number = 0.5. For sake of simplicity Dirichlet boundary conditions are used on all surfaces of the cube. Resulting wavefield example is given on Figures~\ref{fig:step70}-\ref{fig:step70s}.
 
 \begin{figure}[h!]
 \begin{minipage}[h!]{0.49\textwidth}

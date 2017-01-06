@@ -420,6 +420,7 @@ main(int argc, char * args[])
   
   // Print out total elapsed time
   total_time_end = clock();
+  ierr = PetscPrintf(PETSC_COMM_WORLD, "\n Please check ./seism/ for seismograms\n"); CHKERRQ(ierr);
   double time_spent = (double)(total_time_end - total_time_begin) / CLOCKS_PER_SEC;
   ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Total time: \t %f sec \n", time_spent); CHKERRQ(ierr);
