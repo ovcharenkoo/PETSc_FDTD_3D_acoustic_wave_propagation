@@ -8,7 +8,7 @@
 
   Finite-Differences in Time Domain (FDTD)
   Implicit time stepping
-  O(2,4), schemes: in space [-1:16:-30:16:-1]/12dx2, in time [2:-5:4:-1]/dt2
+  Accuracy O(2,4), schemes: in space [-1:16:-30:16:-1]/12dx2, in time [2:-5:4:-1]/dt2
 */
 
 #include <stdio.h>
@@ -16,6 +16,9 @@
 #include <petscksp.h>
 #include <math.h>
 #include <time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define debprint(expr) PetscPrintf(PETSC_COMM_WORLD, #expr " = %f \n", expr);
 
@@ -122,6 +125,19 @@ main(int argc, char * args[])
   bool  FOUTPUT                 = true;
   bool  SAVE_WAVEFIELD_MATLAB   = false;
   int   IT_DISPLAY              = 50;
+
+  struct stat st = {0};
+
+  // Create folders for output if they are missing
+  if (stat("./seism/", &st) == -1) 
+  {
+      mkdir("./seism/", 0700);
+  }
+
+  if (stat("./wavefields/", &st) == -1) 
+  {
+      mkdir("./wavefields/", 0700);
+  }
 
   PetscErrorCode ierr;                              // PETSc error code
   DM da;
@@ -248,7 +264,7 @@ main(int argc, char * args[])
   lambda_min = cmin / ctx.src.f0;   // Min wavelength in model
 
   // RECEIVERS
-  ctx.rec.nrec = 40;                // Number of receivers
+  ctx.rec.nrec = 20;                // Number of receivers
   ierr = PetscOptionsGetInt(NULL, NULL, "-nrec",&ctx.rec.nrec, NULL); CHKERRQ(ierr);
 
 

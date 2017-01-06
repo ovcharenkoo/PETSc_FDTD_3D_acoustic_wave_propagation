@@ -1,9 +1,14 @@
 
 /*
-  Author: Oleg Ovcharenko, PhD student at ErSE, KAUST
+  Author: Oleg Ovcharenko, PhD student at ErSE, affiliated to ECRC
+          King Abdullah University of Science and Technology
   Email:  oleg.ovcharenko@kaust.edu.sa
 
-  ps4.c: A PETSc example that solves a 2D linear Poisson equation
+  3D acoustic wave propagation in homogeneous isotropic media, using PETSc
+
+  Finite-Differences in Time Domain (FDTD)
+  Implicit time stepping
+  Accuracy O(2,2), schemes: in space [-1:2:-1]/dx2, in time [2:-5:4:-1]/dt2
 */
 
 #include <stdio.h>
@@ -11,80 +16,85 @@
 #include <petscksp.h>
 #include <math.h>
 #include <time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define debprint(expr) PetscPrintf(PETSC_COMM_WORLD, #expr " = %f \n", expr);
+
+// Constants
 #define PI 3.1415926535
 #define DEGREES_TO_RADIANS PI/180.f
 
 //User-functions prototypes
-PetscErrorCode compute_A_ux(KSP, Mat, Mat, void *);
-PetscErrorCode update_b_ux(KSP, Vec, void *);
-PetscErrorCode save_Vec_to_m_file(Vec, void *);
-PetscErrorCode Save_seismograms_to_txt_files(KSP, void *);
-PetscErrorCode source_term(void *);
-PetscErrorCode Write_seismograms(KSP, Vec, void *);
-PetscScalar    ***f3tensor(PetscInt, PetscInt, PetscInt, PetscInt,PetscInt, PetscInt);
+PetscErrorCode compute_A_u(KSP, Mat, Mat, void *);  // Build A, for Ax=b
+PetscErrorCode update_b_u(KSP, Vec, void *);        // Build b, for Ax=b
+PetscErrorCode save_Vec_to_m_file(Vec, void *);     // Save wavefield into MATLAB .m file
+PetscErrorCode Save_seismograms_to_txt_files(KSP, void *);  // Save seism. to .txt files
+PetscErrorCode source_term(void *);                 // Compute source term for current time step
+PetscErrorCode Write_seismograms(KSP, Vec, void *); // Append new value to the seismograms
+PetscScalar    ***f3tensor(PetscInt, PetscInt, PetscInt, PetscInt,PetscInt, PetscInt); // Create 3D array
 
+/*
+  User-defined structures
+*/
 
-// User-defined structures
 // Wavefield
 typedef struct {
-  Vec ux;
-  Vec uxm1; 
-  Vec uxm2; 
-  Vec uxm3; 
-
+  Vec u;                      // Pressure wavefield at T
+  Vec um1;                    // Pressure wavefield at T-1
+  Vec um2;                    // Pressure wavefield at T-2 
+  Vec um3;                    // Pressure wavefield at T-3 
 } wfield;
 
 // Model parameters
 typedef struct {
-  PetscInt nx;
-  PetscInt ny;
-  PetscInt nz;
-  PetscScalar dx;
+  PetscInt nx;                // Number of grid points along X
+  PetscInt ny;                
+  PetscInt nz;                
+  PetscScalar dx;             // Grid spacing [km]
   PetscScalar dy;
   PetscScalar dz;
-  PetscScalar xmax;
+  PetscScalar xmax;           // Limits along OX, xmin ... xmax [km]
   PetscScalar xmin;
   PetscScalar ymax;
   PetscScalar ymin;
   PetscScalar zmax;
   PetscScalar zmin;
-  PetscScalar c11;
+  PetscScalar vel;            // Wave propagation velocity [km/s]
 } model_par;
 
 typedef struct{
-  PetscScalar dt;
+  PetscScalar dt;             // Time step [s]
   PetscScalar t0;
-  PetscScalar tmax;
-  PetscScalar t;
-  PetscInt it;
-  PetscInt nt;
+  PetscScalar tmax;           // Total simulation time [s]
+  PetscScalar t;              // Current simulation time [s]
+  PetscInt it;                // Current simulation step
+  PetscInt nt;                // Total simulation steps
 } time_par;
 
 typedef struct{
-  PetscInt isrc;
+  PetscInt isrc;              // Source position, in grid points
   PetscInt jsrc;
   PetscInt ksrc;
-  PetscScalar factor;         // ampliturde
+  PetscScalar factor;         // Source ampliturde
   PetscScalar angle_force;
-  PetscScalar f0;             // frequency
-  PetscScalar fx;             // force x
-  PetscScalar fy;             // force y
-  PetscScalar fz;             // force z
+  PetscScalar f0;             // Source frequency
+  PetscScalar fx;             // Force x component
+  PetscScalar fy;             
+  PetscScalar fz;             
 } source;
 
 typedef struct
 {
-  PetscInt nrec;
-  PetscInt *irec;
+  PetscInt nrec;              // Number of receivers
+  PetscInt *irec;             // Receiver positions, in grid points
   PetscInt *jrec;
   PetscInt *krec;
-  PetscScalar ***seis;
+  PetscScalar ***seis;        // Array to store seismograms [nrec][nt][2]
 } receivers;
 
-// User context to use with PETSc functions
-typedef struct {
+typedef struct {              // User context that gathers all the structures above
   wfield wf;
   model_par model;
   time_par time;
@@ -93,7 +103,7 @@ typedef struct {
 } ctx_t;
 
 
-typedef int bool;
+typedef int bool;             // TRUE-FALSE definition
 #define true 1
 #define false 0
 
@@ -102,10 +112,8 @@ typedef int bool;
 
 
 
-
-
 /*
-  Main C function
+  Main function
 */
 int
 main(int argc, char * args[]) 
@@ -113,34 +121,47 @@ main(int argc, char * args[])
   /*
     VARIABLES
   */
-  PetscErrorCode ierr; // PETSc error code
+
+  bool  FOUTPUT                 = true;
+  bool  SAVE_WAVEFIELD_MATLAB   = false;
+  int   IT_DISPLAY              = 50;
+
+  struct stat st = {0};
+
+  // Create folders for output if they are missing
+  if (stat("./seism/", &st) == -1) 
+  {
+      mkdir("./seism/", 0700);
+  }
+
+  if (stat("./wavefields/", &st) == -1) 
+  {
+      mkdir("./wavefields/", 0700);
+  }
+
+  PetscErrorCode ierr;                              // PETSc error code
   DM da;
 
-  Vec b, *pux;
-  Vec *puxm1;
-  Vec *puxm2;
-  Vec *puxm3;
+  // Initialize the PETSc database and MPI
+  ierr = PetscInitialize(&argc, &args, NULL, NULL);   CHKERRQ(ierr);
+  MPI_Comm comm = PETSC_COMM_WORLD;                 // The global PETSc MPI communicator
 
-  PetscScalar *pc11;
+
+  Vec b, *pu;
+  Vec *pum1;
+  Vec *pum2;
+  Vec *pum3;
+  PetscScalar *pvel;
   PetscScalar *pdx, *pdy, *pdz, *pxmax, *pymax, *pzmax;
   PetscScalar *pt0, *pdt, *ptmax;
-  PetscInt *pnx, *pny, *pnz, *pnt;
   PetscScalar norm;
-
-  bool FOUTPUT                = true;
-  bool SAVE_WAVEFIELD_MATLAB  = false;
-  int  IT_DISPLAY             = 50;
-
-  clock_t total_time_begin, total_time_end;
-  total_time_begin = clock();
+  PetscInt *pnx, *pny, *pnz, *pnt;
+  PetscInt tmp;
 
   ctx_t ctx, *pctx;
 
-  PetscInt tmp;
-
-
-  ierr = PetscInitialize(&argc, &args, NULL, NULL);   CHKERRQ(ierr);   // Initialize the PETSc database and MPIeo
-  MPI_Comm comm = PETSC_COMM_WORLD;   // The global PETSc MPI communicator
+  clock_t total_time_begin, total_time_end;         
+  total_time_begin = clock();                       // Start total time counter
 
 
   /*
@@ -148,10 +169,10 @@ main(int argc, char * args[])
   */
   pctx = &ctx;
   
-  pux = &ctx.wf.ux;
-  puxm1 = &ctx.wf.uxm1;
-  puxm2 = &ctx.wf.uxm2;
-  puxm3 = &ctx.wf.uxm3;
+  pu = &ctx.wf.u;
+  pum1 = &ctx.wf.um1;
+  pum2 = &ctx.wf.um2;
+  pum3 = &ctx.wf.um3;
 
   pnx = &ctx.model.nx;
   pny = &ctx.model.ny;
@@ -165,7 +186,7 @@ main(int argc, char * args[])
   pymax = &ctx.model.ymax;
   pzmax = &ctx.model.zmax;
   
-  pc11 = &ctx.model.c11;
+  pvel = &ctx.model.vel;
 
   pnt = &ctx.time.nt;
   pt0 = &ctx.time.t0;
@@ -176,72 +197,78 @@ main(int argc, char * args[])
     CREATE DMDA OBJECT. MESH
   */
   ierr = DMDACreate3d(comm, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,  // Create mesh
-                      DMDA_STENCIL_STAR, -25, -25, -25, PETSC_DECIDE, PETSC_DECIDE,
-                      PETSC_DECIDE, 1, 1, NULL, NULL, NULL, &da);   CHKERRQ(ierr);
+                      DMDA_STENCIL_STAR, -32, -32, -32, PETSC_DECIDE, PETSC_DECIDE,
+                      PETSC_DECIDE, 1, 2, NULL, NULL, NULL, &da);   CHKERRQ(ierr);
 
-  ierr = DMDAGetInfo(da,0,pnx, pny, pnz, 0,0,0,0,0,0,0,0,0);  CHKERRQ(ierr); // Get NX, Ny, NZ
+  ierr = DMDAGetInfo(da,0,pnx, pny, pnz, 0,0,0,0,0,0,0,0,0);  CHKERRQ(ierr);          // Get NX, NY, NZ
 
   /*
-    CREATE VEC OBJECTS
+    CREATE GLOBAL VEC OBJECTS
   */
-  ierr = DMCreateGlobalVector(da, pux);   CHKERRQ(ierr);  // Create a global ux vector derived from the DM object
+  ierr = DMCreateGlobalVector(da, pu);   CHKERRQ(ierr);   // Create a global u vector derived from the DM object
   
-  ierr = VecDuplicate(*pux, &b);   CHKERRQ(ierr);         // RHS of the system
-  // ierr = VecDuplicate(*pux, pc11);   CHKERRQ(ierr);       // Duplicate vectors from grid object to each vector component
+  ierr = VecDuplicate(*pu, &b);   CHKERRQ(ierr);          // RHS of the system
+  ierr = VecDuplicate(*pu, pum1); CHKERRQ(ierr);          // u at time n-1
+  ierr = VecDuplicate(*pu, pum2); CHKERRQ(ierr);          // u at time n-2
+  ierr = VecDuplicate(*pu, pum3); CHKERRQ(ierr);          // u at time n-3 
 
-  ierr = VecDuplicate(*pux, puxm1); CHKERRQ(ierr);        // ux at time n-1
-  ierr = VecDuplicate(*pux, puxm2); CHKERRQ(ierr);        // ux at time n-2
-  ierr = VecDuplicate(*pux, puxm3); CHKERRQ(ierr);        // ux at time n-3 
-
-  // ierr = VecSet(*pc11, 2.0f); CHKERRQ(ierr);            // c velocity, m/sec
-  *pc11 = 2.0f;
-
-  /*----------------------------------------------------------------------
+  /*
     SET MODEL PATRAMETERS
-  ------------------------------------------------------------------------*/
+  */
+  // Wave propagation VELOCITY
+  *pvel = 3.5f;
+  ierr = PetscOptionsGetReal(NULL, NULL, "-vel",&ctx.model.vel, NULL); CHKERRQ(ierr);   //input on-the-fly
+  
   // MODEL SIZE Xmax Ymax Zmax in meters
-  *pxmax = 1.f; //[km]
-  *pymax = 1.f;
-  *pzmax = 1.f;
+  *pxmax = 8.f;                     //[km]
+  *pymax = 8.f;
+  *pzmax = 8.f;
+  ierr = PetscOptionsGetReal(NULL, NULL, "-xmax",&ctx.model.xmax, NULL); CHKERRQ(ierr);
+  ierr = PetscOptionsGetReal(NULL, NULL, "-ymax",&ctx.model.ymax, NULL); CHKERRQ(ierr);
+  ierr = PetscOptionsGetReal(NULL, NULL, "-zmax",&ctx.model.zmax, NULL); CHKERRQ(ierr);
 
   // GRID STEP DX DY and DZ
-  *pdx = *pxmax / *pnx; //[km]
+  *pdx = *pxmax / *pnx;             //[km]
   *pdy = *pymax / *pny;
   *pdz = *pzmax / *pnz;
 
   PetscScalar cmax, cmin, lambda_min;
 
-  // VecMax(ctx.model.c11, NULL, &cmax);
-  // VecMin(ctx.model.c11, NULL, &cmin);
-
-  cmin = *pc11;
-  cmax = *pc11;
+  cmin = *pvel;
+  cmax = *pvel;
 
   // TIME STEPPING PARAMETERS
-  *pdt =  (*pdx) / cmax; //[sec]
-  // *pdt = 0.001f;
-  *ptmax = 0.5f; //[sec]
+  *pdt =  (*pdx) / cmax;            //[sec], to have CFL = 1, could be set from runtime
+  ierr = PetscOptionsGetReal(NULL, NULL, "-dt",&ctx.time.dt, NULL); CHKERRQ(ierr);
+
+  *ptmax = 1.f;                     //[sec]
+  ierr = PetscOptionsGetReal(NULL, NULL, "-tmax",&ctx.time.tmax, NULL); CHKERRQ(ierr);
+  
   *pnt = *ptmax / *pdt;
 
   // SOURCE PARAMETERS
   ctx.src.isrc = (PetscInt) *pnx / 2;
   ctx.src.jsrc = (PetscInt) *pny / 2;
   ctx.src.ksrc = (PetscInt) *pnz / 2;
-  ctx.src.f0 = 40.f; //[Hz]
-  ctx.src.factor = pow(10.f,8); //amplitude
-  ctx.src.angle_force = 90; // degrees
+  ierr = PetscOptionsGetInt(NULL, NULL, "-isrc",&ctx.src.isrc, NULL); CHKERRQ(ierr);
+  ierr = PetscOptionsGetInt(NULL, NULL, "-jsrc",&ctx.src.jsrc, NULL); CHKERRQ(ierr);
+  ierr = PetscOptionsGetInt(NULL, NULL, "-ksrc",&ctx.src.ksrc, NULL); CHKERRQ(ierr);
+  
+  
+  ctx.src.f0 = 20.f;                //[Hz]
+  ierr = PetscOptionsGetReal(NULL, NULL, "-f0",&ctx.src.f0, NULL); CHKERRQ(ierr);
 
-  lambda_min = cmin / ctx.src.f0;                 // Min wavelength in model
+  ctx.src.factor = pow(10.f,7);     //amplitude
+  ctx.src.angle_force = 90;         // degrees
+
+  lambda_min = cmin / ctx.src.f0;   // Min wavelength in model
 
   // RECEIVERS
+  ctx.rec.nrec = 20;                // Number of receivers
+  ierr = PetscOptionsGetInt(NULL, NULL, "-nrec",&ctx.rec.nrec, NULL); CHKERRQ(ierr);
 
-  ctx.rec.nrec = 40;
 
-  // PetscInt irec[]={ctx.src.isrc, (PetscInt) ctx.src.isrc/2, (PetscInt) ctx.src.isrc/4};
-  // PetscInt jrec[]={ctx.src.jsrc, ctx.src.jsrc, ctx.src.jsrc};
-  // PetscInt krec[]={ctx.src.ksrc, ctx.src.ksrc, ctx.src.ksrc}; 
-
-  PetscInt irec[ctx.rec.nrec], *pirec;
+  PetscInt irec[ctx.rec.nrec], *pirec; // Arrays for rec positions
   PetscInt jrec[ctx.rec.nrec], *pjrec;
   PetscInt krec[ctx.rec.nrec], *pkrec;
 
@@ -249,20 +276,21 @@ main(int argc, char * args[])
   pjrec = &jrec[0];
   pkrec = &krec[0];
 
+  // Place receivers on diogonal
   int i;
   for (i = 0; i < ctx.rec.nrec; i++)
   {
-    *(pirec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.src.isrc) / ctx.rec.nrec;
-    *(pjrec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.src.jsrc) / ctx.rec.nrec;
-    *(pkrec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.src.ksrc) / ctx.rec.nrec;
+    *(pirec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.model.nx) / ctx.rec.nrec;
+    *(pjrec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.model.ny) / ctx.rec.nrec;
+    *(pkrec + i) = (PetscInt) (ctx.rec.nrec - i) * (ctx.model.nz) / ctx.rec.nrec;
   }
   
   ctx.rec.irec = irec;
   ctx.rec.jrec = jrec;
   ctx.rec.krec = krec;
-  // ctx.rec.nrec = (PetscInt) sizeof(irec)/sizeof(irec[0]);
 
-  PetscScalar ***seis; //Array with seismograms [NREC][NT][2], 2 is for time and displacement colums
+  //Array with seismograms [NREC][NT][2], 2 is for time and displacement colums
+  PetscScalar ***seis;              
   seis = f3tensor(0,ctx.rec.nrec,0,*pnt,0,2);
   ctx.rec.seis = seis;
 
@@ -280,13 +308,14 @@ main(int argc, char * args[])
   PetscPrintf(PETSC_COMM_WORLD,"\t ISRC %i \t JSRC %i \t KSRC %i\n", ctx.src.isrc, ctx.src.jsrc, ctx.src.ksrc);
   PetscPrintf(PETSC_COMM_WORLD,"\t F0 \t %f Hz \n", ctx.src.f0);
   PetscPrintf(PETSC_COMM_WORLD,"\t MIN Lambda \t %f km \n", lambda_min);
-  PetscPrintf(PETSC_COMM_WORLD,"\t POINTS PER WAVELENGTH \t %f \n", lambda_min/(*pdx));
+  PetscPrintf(PETSC_COMM_WORLD,"\t POINTS PER WAvelENGTH \t %f \n", lambda_min/(*pdx));
   PetscPrintf(PETSC_COMM_WORLD,"\n");
 
   PetscPrintf(PETSC_COMM_WORLD,"RECEIVERS:\n");
   PetscPrintf(PETSC_COMM_WORLD,"\t NREC \t %i\n", ctx.rec.nrec);
   PetscPrintf(PETSC_COMM_WORLD,"\t IREC \t JREC \t KSREC \n");
 
+  // PRINT RECEIVER POSITIONS'
   int rr;
   for (rr = 0; rr < ctx.rec.nrec; rr++)
   {
@@ -302,7 +331,7 @@ main(int argc, char * args[])
   PetscPrintf(PETSC_COMM_WORLD,"CFL CONDITION: \t %f \n", cmax * (*pdt)/(*pdx));
   PetscPrintf(PETSC_COMM_WORLD,"\n");
   
-  VecGetSize(*pux, &tmp);
+  VecGetSize(*pu, &tmp);
   PetscPrintf(PETSC_COMM_WORLD,"MATRICES AND VECTORS: \n");
   PetscPrintf(PETSC_COMM_WORLD,"\t Vec elements \t %i\n", tmp);
   PetscPrintf(PETSC_COMM_WORLD,"\t Mat \t %i x %i x %i \n", *pnx, *pny, *pnz);
@@ -313,13 +342,13 @@ main(int argc, char * args[])
   /*  
     CREATE KSP, KRYLOV SUBSPACE OBJECTS 
   */
-  KSP ksp_ux;
+  KSP ksp_u;
 
-  // Create Krylov solver for ux component
-  ierr = KSPCreate(comm, &ksp_ux);   CHKERRQ(ierr);                       // Create the KPS object
-  ierr = KSPSetDM(ksp_ux, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
-  ierr = KSPSetComputeOperators(ksp_ux, compute_A_ux, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
-  ierr = KSPSetFromOptions(ksp_ux);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
+  // Create Krylov solver for u component
+  ierr = KSPCreate(comm, &ksp_u);   CHKERRQ(ierr);                       // Create the KPS object
+  ierr = KSPSetDM(ksp_u, (DM) da);   CHKERRQ(ierr);                      // Set the DM to be used as preconditioner
+  ierr = KSPSetComputeOperators(ksp_u, compute_A_u, &ctx);   CHKERRQ(ierr);   // Compute and assemble the coefficient matrix A
+  ierr = KSPSetFromOptions(ksp_u);   CHKERRQ(ierr);                      // KSP options can be changed during the runtime
 
   /*
     TIME LOOP
@@ -334,14 +363,14 @@ main(int argc, char * args[])
     ctx.time.it = it;
     ctx.time.t = (PetscScalar) (it-1) * ctx.time.dt;
     
-    ierr = KSPSetComputeRHS(ksp_ux, update_b_ux, &ctx);   CHKERRQ(ierr);  // new rhs for next iteration
-    ierr = KSPSolve(ksp_ux, b, *pux);   CHKERRQ(ierr);                    // Solve the linear system using KSP
+    ierr = KSPSetComputeRHS(ksp_u, update_b_u, &ctx);   CHKERRQ(ierr);  // new rhs for next iteration
+    ierr = KSPSolve(ksp_u, b, *pu);   CHKERRQ(ierr);                    // Solve the linear system using KSP
     
-    ierr = Write_seismograms(ksp_ux, *pux, &ctx); CHKERRQ(ierr);
+    ierr = Write_seismograms(ksp_u, *pu, &ctx); CHKERRQ(ierr);          // Append value to the seismograms
     
-    ierr = VecCopy(*puxm2, *puxm3);   CHKERRQ(ierr);                      // copy vector um2 to um3
-    ierr = VecCopy(*puxm1, *puxm2);   CHKERRQ(ierr);                      // copy vector um1 to um2
-    ierr = VecCopy(*pux, *puxm1);   CHKERRQ(ierr);                        // copy vector u to um1
+    ierr = VecCopy(*pum2, *pum3);   CHKERRQ(ierr);                      // copy vector um2 to um3
+    ierr = VecCopy(*pum1, *pum2);   CHKERRQ(ierr);                      // copy vector um1 to um2
+    ierr = VecCopy(*pu, *pum1);   CHKERRQ(ierr);                        // copy vector u to um1
 
 
 
@@ -351,13 +380,13 @@ main(int argc, char * args[])
       end = clock();
       ierr = PetscPrintf(PETSC_COMM_WORLD, "Time step: \t %i of %i\n", ctx.time.it, ctx.time.nt);   CHKERRQ(ierr);
 
-      ierr = VecMax(*pux, NULL, &cmax); CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "UX max: \t %g \n", cmax); CHKERRQ(ierr);
+      ierr = VecMax(*pu, NULL, &cmax); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "u max: \t %g \n", cmax); CHKERRQ(ierr);
       
-      ierr = VecMin(*pux, NULL, &cmin); CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_WORLD, "UX min: \t %g \n", cmin); CHKERRQ(ierr);
+      ierr = VecMin(*pu, NULL, &cmin); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_WORLD, "u min: \t %g \n", cmin); CHKERRQ(ierr);
 
-      ierr = VecNorm(*pux,NORM_2,&norm); CHKERRQ(ierr);
+      ierr = VecNorm(*pu,NORM_2,&norm); CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_WORLD, "NORM: \t %g \n", norm); CHKERRQ(ierr);
 
       double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
@@ -365,9 +394,9 @@ main(int argc, char * args[])
 
       if (SAVE_WAVEFIELD_MATLAB)
       {
-        char buffer[32];                                 // The filename buffer.
+        char buffer[64];
         snprintf(buffer, sizeof(buffer), "./wavefields/tmp_Bvec_%i.m", it);
-        ierr = save_Vec_to_m_file(*pux, &buffer); CHKERRQ(ierr);
+        ierr = save_Vec_to_m_file(*pu, &buffer); CHKERRQ(ierr);
       }
       
       ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
@@ -375,22 +404,21 @@ main(int argc, char * args[])
     }
   }
 
-  ierr = Save_seismograms_to_txt_files(ksp_ux, pctx);   CHKERRQ(ierr);
+  ierr = Save_seismograms_to_txt_files(ksp_u, pctx);   CHKERRQ(ierr);     // Write seismograms into .txt files
 
   /*
     CLEAN ALLOCATIONS AND EXIT
   */
-  ierr = VecDestroy(&b);   CHKERRQ(ierr);
-  ierr = VecDestroy(pux);   CHKERRQ(ierr);
-  ierr = VecDestroy(puxm1);   CHKERRQ(ierr);
-  ierr = VecDestroy(puxm2);   CHKERRQ(ierr);
-  ierr = VecDestroy(puxm3);   CHKERRQ(ierr);
-  // ierr = VecDestroy(pc11);   CHKERRQ(ierr);
+  ierr = VecDestroy(&b);     CHKERRQ(ierr);
+  ierr = VecDestroy(pu);     CHKERRQ(ierr);
+  ierr = VecDestroy(pum1);   CHKERRQ(ierr);
+  ierr = VecDestroy(pum2);   CHKERRQ(ierr);
+  ierr = VecDestroy(pum3);   CHKERRQ(ierr);
 
-
-  ierr = KSPDestroy(&ksp_ux);   CHKERRQ(ierr);
-  ierr = DMDestroy(&da);   CHKERRQ(ierr);
+  ierr = KSPDestroy(&ksp_u); CHKERRQ(ierr);
+  ierr = DMDestroy(&da);     CHKERRQ(ierr);
   
+  // Print out total elapsed time
   total_time_end = clock();
   double time_spent = (double)(total_time_end - total_time_begin) / CLOCKS_PER_SEC;
   ierr = PetscPrintf(PETSC_COMM_WORLD, "\n"); CHKERRQ(ierr);
@@ -431,7 +459,7 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
   ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);           //Get the DM oject of the KSP
 
   DMDALocalInfo grid;
-  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);  //Get the global information of the DM grid
 
   ierr = DMDAVecGetArray(da, u, &_u);   CHKERRQ(ierr);
   
@@ -442,26 +470,16 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
   PetscInt *irec = c->rec.irec;
   PetscInt *jrec = c->rec.jrec;
   PetscInt *krec = c->rec.krec;
- 
-  // PetscPrintf(PETSC_COMM_WORLD, " %i %i \n %i %i \n %i %i \n \n", 
-  //                                                     grid.xs, grid.xs + grid.xm,
-  //                                                     grid.ys, grid.ys + grid.ym,
-  //                                                     grid.zs, grid.zs + grid.zm);
 
   int xrec;
   for (xrec = 0; xrec < nrec; xrec++)
   {
-    if ((irec[xrec] >= grid.xs) && (irec[xrec] <= (grid.xs + grid.xm)) &&
-        (jrec[xrec] >= grid.ys) && (jrec[xrec] <= (grid.ys + grid.ym)) &&
-        (krec[xrec] >= grid.zs) && (krec[xrec] <= (grid.zs + grid.zm)))
+    if ((irec[xrec] > grid.xs) && (irec[xrec] < (grid.xs + grid.xm)) &&
+        (jrec[xrec] > grid.ys) && (jrec[xrec] < (grid.ys + grid.ym)) &&
+        (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
         {
-  // PetscPrintf(PETSC_COMM_WORLD, "%i\n %i %i %i \n %i %i %i \n %i %i %i \n \n", nrec, 
-  //                                                     irec[xrec], grid.xs, grid.xs + grid.xm,
-  //                                                     jrec[xrec], grid.ys, grid.ys + grid.ym,
-  //                                                     krec[xrec], grid.zs, grid.zs + grid.zm);
           c->rec.seis[xrec][it-1][0] = t;
           c->rec.seis[xrec][it-1][1] = _u[krec[xrec]][jrec[xrec]][irec[xrec]];
-          // ierr = PetscPrintf(PETSC_COMM_WORLD, "!!!!! %i u \t %f \n", xrec, _u[krec[xrec]][jrec[xrec]][irec[xrec]]); CHKERRQ(ierr);
         }
   }
   
@@ -469,6 +487,11 @@ Write_seismograms(KSP ksp, Vec u ,void *ctx)
 
   PetscFunctionReturn(0);
 } 
+
+
+
+
+
 
 // SAVE VECTOR TO .m FILE
 PetscErrorCode
@@ -534,9 +557,9 @@ source_term(void * ctx)
 
 
 
-// UPDATE RHS OF UX EQUATION
+// UPDATE RHS AT NEW TIME STEP
 PetscErrorCode
-update_b_ux(KSP ksp, Vec b, void * ctx) 
+update_b_u(KSP ksp, Vec b, void * ctx) 
 {
   PetscFunctionBegin;
   PetscErrorCode ierr;
@@ -553,51 +576,42 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
   DMDALocalInfo grid;
   ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
 
-  // double hx = (1.f / (double) (grid.mx - 1));
-  // double hy = (1.f / (double) (grid.my - 1));
-  // double hz = (1.f / (double) (grid.mz - 1));
-
   PetscScalar hx = c->model.dx;
   PetscScalar hy = c->model.dy;
   PetscScalar hz = c->model.dz;
   
   double *** _b;
-  // double *** _uxm1, ***_uxm2, ***_uxm3, ***_rho;
-  double *** _uxm1, ***_uxm2, ***_uxm3;
-  
+  double *** _um1, ***_um2, ***_um3;
 
   ierr = DMDAVecGetArray(da, b, &_b);   CHKERRQ(ierr);
-  ierr = DMDAVecGetArray(da, c->wf.uxm1, &_uxm1);   CHKERRQ(ierr);
-  ierr = DMDAVecGetArray(da, c->wf.uxm2, &_uxm2);   CHKERRQ(ierr);
-  ierr = DMDAVecGetArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);
-
-
-  /*
-    Loop over the grid points, and fill b 
-  */
+  ierr = DMDAVecGetArray(da, c->wf.um1, &_um1);   CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, c->wf.um2, &_um2);   CHKERRQ(ierr);
+  ierr = DMDAVecGetArray(da, c->wf.um3, &_um3);   CHKERRQ(ierr);
+  
+  //  Fill b
   double f, source_term;
   unsigned int k;
-  for(k = grid.zs; k < (grid.zs + grid.zm); k++) // Depth
+  for(k = grid.zs; k < (grid.zs + grid.zm); k++)      // Depth
   {
     unsigned int j;
-    for(j = grid.ys; j < (grid.ys + grid.ym); j++) // Columns
+    for(j = grid.ys; j < (grid.ys + grid.ym); j++)    // Columns
     {
       unsigned int i;
-      for(i = grid.xs; i < (grid.xs + grid.xm); i++) // Rows
+      for(i = grid.xs; i < (grid.xs + grid.xm); i++)  // Rows
       {
-        /* Nodes on the boundary layers (\Gamma) */
+        // Nodes on the boundary layers
         if((i == 0) || (i == (grid.mx - 1)) ||
           (j == 0) || (j == (grid.my - 1)) ||
           (k == 0) || (k == (grid.mz - 1)))
         {
           _b[k][j][i] = 0.f;
         }
-        /* Interior nodes in the domain (\Omega) */
+        //Interior nodes
         else 
         { 
           if ((i==c->src.isrc) && (j==c->src.jsrc) && (k==c->src.ksrc))
           {
-            source_term = dt2 * (c->src.fx);
+            source_term = c->src.fx;
           }
           else
           {
@@ -605,7 +619,7 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
           }
 
           f = hx * hy * hz *
-          (5.f * _uxm1[k][j][i] - 4.f * _uxm2[k][j][i] + 1.f * _uxm3[k][j][i] + source_term);
+          (5.f * _um1[k][j][i] - 4.f * _um2[k][j][i] + 1.f * _um3[k][j][i] + dt2 * source_term);
 
           _b[k][j][i] = f;
         }
@@ -613,11 +627,12 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
     }
   }
 
-  ierr = DMDAVecRestoreArray(da, b, &_b);   CHKERRQ(ierr);   // Release the resource
-  ierr = DMDAVecRestoreArray(da, c->wf.uxm1, &_uxm1);   CHKERRQ(ierr);   // Release the resource
-  ierr = DMDAVecRestoreArray(da, c->wf.uxm2, &_uxm2);   CHKERRQ(ierr);   // Release the resource
-  ierr = DMDAVecRestoreArray(da, c->wf.uxm3, &_uxm3);   CHKERRQ(ierr);   // Release the resource
+  ierr = DMDAVecRestoreArray(da, b, &_b);             CHKERRQ(ierr);   // Release the resource
+  ierr = DMDAVecRestoreArray(da, c->wf.um1, &_um1);   CHKERRQ(ierr);   // Release the resource
+  ierr = DMDAVecRestoreArray(da, c->wf.um2, &_um2);   CHKERRQ(ierr);   // Release the resource
+  ierr = DMDAVecRestoreArray(da, c->wf.um3, &_um3);   CHKERRQ(ierr);   // Release the resource
 
+  // FIX NULLSPACE-CAUSED PROBLEMS
   MatNullSpace   nullspace;
   MatNullSpaceCreate(PETSC_COMM_WORLD,PETSC_TRUE,0,0,&nullspace);
   MatNullSpaceRemove(nullspace,b);
@@ -628,23 +643,16 @@ update_b_ux(KSP ksp, Vec b, void * ctx)
 
 
 
-
-/*=========================================================================================
- Using example 34 from
- http://www.mcs.anl.gov/petsc/petsc-current/src/ksp/ksp/examples/tutorials/ex34.c.html \
-  =========================================================================================*/
-
-// COMPUTE OPERATOR A FOR UX EQUATION
+// BUILD MATRIX A
 PetscErrorCode 
-compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
+compute_A_u(KSP ksp, Mat A, Mat J, void * ctx)
 {
   PetscFunctionBegin;
 
   PetscErrorCode ierr;
   PetscScalar v[7], hx, hy, hz, hyhzdhx, hxhzdhy, hxhydhz;
   PetscScalar dt, dt2;
-  // double ***rho, ***c11;
-  PetscScalar c11, c112;  
+  PetscScalar vel, vel2;  
   PetscInt n;
   DM da;
   DMDALocalInfo grid;
@@ -653,19 +661,15 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   
   ctx_t *c = (ctx_t *) ctx;
 
-  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);   // Get the DMDA object
-  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);   // Get the grid information
+  ierr = KSPGetDM(ksp, &da);   CHKERRQ(ierr);             // Get the DMDA object
+  ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr);    // Get the grid information
 
-  // ierr = DMDAVecGetArray(da, c->model.c11, &c11);   CHKERRQ(ierr);
-  c11 = c->model.c11;
-  c112 = pow(c11, 2);
+  vel = c->model.vel;
+  vel2 = pow(vel, 2);
 
   dt = c->time.dt;
   dt2 = dt * dt;
 
-  // hx = (1.f / (double) (grid.mx - 1));
-  // hy = (1.f / (double) (grid.my - 1));
-  // hz = (1.f / (double) (grid.mz - 1));
   hx = c->model.dx;
   hy = c->model.dy;
   hz = c->model.dz;
@@ -676,13 +680,13 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
 
   /* Loop over the grid points */
   unsigned int k;
-  for(k = grid.zs; k < (grid.zs + grid.zm); k++) // Depth 
+  for(k = grid.zs; k < (grid.zs + grid.zm); k++)        // Depth 
   {
     unsigned int j;
-    for(j = grid.ys; j < (grid.ys + grid.ym); j++) // Columns 
+    for(j = grid.ys; j < (grid.ys + grid.ym); j++)      // Columns 
     {
       unsigned int i;
-      for(i = grid.xs; i < (grid.xs + grid.xm); i++)  // Rows
+      for(i = grid.xs; i < (grid.xs + grid.xm); i++)    // Rows
       { 
         n = 1;
         idxm.k = k;
@@ -693,30 +697,29 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
         idxn[0].j = j;
         idxn[0].i = i;
 
-        /* Nodes on the boundary layers (\Gamma) */
+        // Nodes on the boundary
         if((i == 0) || (i == (grid.mx - 1)) ||
           (j == 0) || (j == (grid.my - 1)) ||
           (k == 0) || (k == (grid.mz - 1)))
         {
           v[0]=1.f;
         }
-        /* Interior nodes in the domain (\Omega) */
+        // Interior nodes
         else 
         {
-          v[0] = c112 * dt2 * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
+          v[0] = vel2 * dt2 * 2.f * (hyhzdhx + hxhzdhy + hxhydhz);
         // If neighbor is not a known boundary value
         // then we put an entry
 
         if((i - 1) > 0) 
         {
-          // Get the column indices
+                                          // Get the column indices
           idxn[n].j = j;
           idxn[n].i = i - 1;
           idxn[n].k = k;
 
-          v[n] = - c112 *  dt2 * hyhzdhx; // Fill with the value
-          
-          n++; // One column added
+          v[n] = - vel2 *  dt2 * hyhzdhx; // Fill with the value
+          n++;                            // One column added
         }
         if((i + 1) < (grid.mx - 1)) 
         {
@@ -725,55 +728,46 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
           idxn[n].i = i + 1;
           idxn[n].k = k;
 
-          v[n] = - c112 * dt2 * hyhzdhx;  // Fill with the value
-
-          n++; // One column added
+          v[n] = - vel2 * dt2 * hyhzdhx;
+          n++;
         }
         if((j - 1) > 0) 
         {
-          // Get the column indices
           idxn[n].j = j - 1;
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - c112 * dt2 * hxhzdhy; // Fill with the value
-  
-          n++; // One column added
+          v[n] = - vel2 * dt2 * hxhzdhy;
+          n++;
         }
         if((j + 1) < (grid.my - 1)) 
         {
-          // Get the column indices
           idxn[n].j = j + 1;
           idxn[n].i = i;
           idxn[n].k = k;
 
-          v[n] = - c112 * dt2 * hxhzdhy; // Fill with the value
-
-          n++; // One column added
+          v[n] = - vel2 * dt2 * hxhzdhy;
+          n++;
         }
 
         if((k - 1) > 0) 
         {
-          // Get the column indices
           idxn[n].j = j;
           idxn[n].i = i;
           idxn[n].k = k - 1;
 
-          v[n] = - c112 * dt2 * hxhydhz; // Fill with the value
-
-          n++; // One column added
+          v[n] = - vel2 * dt2 * hxhydhz;
+          n++;
         }
 
         if((k + 1) < (grid.mz - 1)) 
         {
-          // Get the column indices
           idxn[n].j = j;
           idxn[n].i = i;
           idxn[n].k = k + 1;
 
-          v[n] = - c112 * dt2 * hxhydhz; // Fill with the value
-
-          n++; // One column added
+          v[n] = - vel2 * dt2 * hxhydhz;
+          n++;
         }
       
         v[0]+= 2.f * hx * hy * hz;
@@ -791,9 +785,6 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
   ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
   ierr = MatAssemblyEnd(A ,MAT_FINAL_ASSEMBLY);   CHKERRQ(ierr);
 
-  // ierr = DMDAVecRestoreArray(da, c->model.c11, &c11);   CHKERRQ(ierr);
-  // ierr = DMDAVecRestoreArray(da, c->model.rho, &rho);   CHKERRQ(ierr);
-
   PetscFunctionReturn(0);
 }
 
@@ -802,6 +793,9 @@ compute_A_ux(KSP ksp, Mat A, Mat J, void * ctx)
 
 
 
+
+// This function allocates memory for a 3D array. The function is taken from SOFI3D_acoustic
+//https://git.scc.kit.edu/GPIAG-Software/SOFI3D/tree/0ca72edf3ef977813372dd26ccfeaf4c19361a69
 
 PetscScalar ***f3tensor(PetscInt nrl, PetscInt nrh, PetscInt ncl, PetscInt nch,PetscInt ndl, PetscInt ndh)
 {
@@ -847,6 +841,7 @@ PetscScalar ***f3tensor(PetscInt nrl, PetscInt nrh, PetscInt ncl, PetscInt nch,P
 
 
 
+// WRITE DOWN FILES WITH SEISMOGRAMS
 PetscErrorCode
 Save_seismograms_to_txt_files(KSP ksp, void *ctx) 
 {
@@ -868,19 +863,17 @@ Save_seismograms_to_txt_files(KSP ksp, void *ctx)
 
   DMDALocalInfo grid;
   ierr = DMDAGetLocalInfo(da, &grid);   CHKERRQ(ierr); //Get the global information of the DM grid
-
-  // ierr = DMDAVecGetArray(da, u, &_u);   CHKERRQ(ierr);
   
   int xrec;
   for (xrec = 0; xrec < nrec; xrec++)
   {
-    if ((irec[xrec] >= grid.xs) && (irec[xrec] <= (grid.xs + grid.xm)) &&
-        (jrec[xrec] >= grid.ys) && (jrec[xrec] <= (grid.ys + grid.ym)) &&
-        (krec[xrec] >= grid.zs) && (krec[xrec] <= (grid.zs + grid.zm)))
+    if ((irec[xrec] > grid.xs) && (irec[xrec] < (grid.xs + grid.xm)) &&
+        (jrec[xrec] > grid.ys) && (jrec[xrec] < (grid.ys + grid.ym)) &&
+        (krec[xrec] > grid.zs) && (krec[xrec] < (grid.zs + grid.zm)))
         {
-          char buffer[32];
-          snprintf(buffer, sizeof(buffer), "./seism/seis_%i_%i_%i_%i.txt", 
-                  xrec, c->rec.irec[xrec], c->rec.jrec[xrec], c->rec.krec[xrec]);
+          char buffer[64];
+          snprintf(buffer, sizeof(buffer), "./seism/seis_%i_%i_%i_%i_%i_%i.txt", 
+          xrec, c->rec.irec[xrec], c->rec.jrec[xrec], c->rec.krec[xrec], (int) c->src.f0, (int) c-> model.xmax);
 
           FILE *fout = fopen(buffer, "wb");     
 
