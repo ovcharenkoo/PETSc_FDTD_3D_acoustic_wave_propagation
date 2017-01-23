@@ -3,9 +3,6 @@
   3D acoustic wave propagation in homogeneous isotropic media, using PETSc
   2017
 
-  Author: Oleg Ovcharenko, PhD student at KAUST (ErSE, ECRC)
-  Email:  oleg.ovcharenko@kaust.edu.sa
-
   PETSc - Portable, Extensible Toolkit for Scientific Computation
   https://www.mcs.anl.gov/petsc/
 
@@ -19,7 +16,10 @@
     make all
     ./run_O24.sh
 
-  Modify run_O24.sh if need to change runtime keyes and number of processors
+
+
+  Author: Oleg Ovcharenko, PhD student at KAUST (ErSE, ECRC)
+  Email:  oleg.ovcharenko@kaust.edu.sa
 */
 
 #include <stdio.h>
