@@ -5,7 +5,7 @@
 Here you find an example of C + PETSc implementation solving acoustic wave equation in 3D.
 Krylov methods are used to find iteratively approximate solution of _Ax=b_
 
-![Wavefield example](https://github.com/ovcharenkoo/PETSc_3D_acoustic_wave_propagation/tree/acoustic/doc/step70)
+![Wavefield example](https://github.com/ovcharenkoo/PETSc_3D_acoustic_wave_propagation/tree/acoustic/doc/step70.png)
 
 ### **DISCRETIZATION DETAILS**:
 * Finite-Differences in Time Domain (FDTD)
