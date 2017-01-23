@@ -1,14 +1,25 @@
 
 /*
-  Author: Oleg Ovcharenko, PhD student at ErSE, affiliated to ECRC
-          King Abdullah University of Science and Technology
+  3D acoustic wave propagation in homogeneous isotropic media, using PETSc
+  2017
+
+  Author: Oleg Ovcharenko, PhD student at KAUST (ErSE, ECRC)
   Email:  oleg.ovcharenko@kaust.edu.sa
 
-  3D acoustic wave propagation in homogeneous isotropic media, using PETSc
+  PETSc - Portable, Extensible Toolkit for Scientific Computation
+  https://www.mcs.anl.gov/petsc/
 
-  Finite-Differences in Time Domain (FDTD)
-  Implicit time stepping
-  Accuracy O(2,4), schemes: in space [-1:16:-30:16:-1]/12dx2, in time [2:-5:4:-1]/dt2
+  # TECH DETAILS:
+    Finite-Differences in Time Domain (FDTD)
+    Implicit time stepping
+    O(2,4)
+    Schemes derived from Taylor series: in space [-1:16:-30:16:-1]/12dx2, in time [2:-5:4:-1]/dt2
+
+  # HOW TO USE: (PETSc has to be installed)
+    make all
+    ./run_O24.sh
+
+  Modify run_O24.sh if need to change runtime keyes and number of processors
 */
 
 #include <stdio.h>
@@ -122,9 +133,9 @@ main(int argc, char * args[])
     VARIABLES
   */
 
-  bool  FOUTPUT                 = true;
-  bool  SAVE_WAVEFIELD_MATLAB   = false;
-  int   IT_DISPLAY              = 50;
+  bool  FOUTPUT                 = true;  // Print information each IT_DISPLAY steps
+  bool  SAVE_WAVEFIELD_MATLAB   = false; // Save the whole wavefield to .m file each IT_DISPLAY steps
+  int   IT_DISPLAY              = 50;    // Number of time steps to give output
 
   struct stat st = {0};
 
@@ -140,7 +151,7 @@ main(int argc, char * args[])
   }
 
   PetscErrorCode ierr;                              // PETSc error code
-  DM da;
+  DM da;                                            // Mesh-object
 
   // Initialize the PETSc database and MPI
   ierr = PetscInitialize(&argc, &args, NULL, NULL);   CHKERRQ(ierr);
@@ -158,7 +169,7 @@ main(int argc, char * args[])
   PetscInt *pnx, *pny, *pnz, *pnt;
   PetscInt tmp;
 
-  ctx_t ctx, *pctx;
+  ctx_t ctx, *pctx;                                 // User context structure
 
   clock_t total_time_begin, total_time_end;         
   total_time_begin = clock();                       // Start total time counter

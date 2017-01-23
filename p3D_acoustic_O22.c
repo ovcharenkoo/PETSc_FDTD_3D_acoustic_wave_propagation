@@ -1,14 +1,25 @@
 
 /*
-  Author: Oleg Ovcharenko, PhD student at ErSE, affiliated to ECRC
-          King Abdullah University of Science and Technology
+  3D acoustic wave propagation in homogeneous isotropic media, using PETSc
+  2017
+
+  Author: Oleg Ovcharenko, PhD student at KAUST (ErSE, ECRC)
   Email:  oleg.ovcharenko@kaust.edu.sa
 
-  3D acoustic wave propagation in homogeneous isotropic media, using PETSc
+  PETSc - Portable, Extensible Toolkit for Scientific Computation
+  https://www.mcs.anl.gov/petsc/
 
-  Finite-Differences in Time Domain (FDTD)
-  Implicit time stepping
-  Accuracy O(2,2), schemes: in space [-1:2:-1]/dx2, in time [2:-5:4:-1]/dt2
+  # TECH DETAILS:
+    Finite-Differences in Time Domain (FDTD)
+    Implicit time stepping
+    O(2,2)
+    Schemes derived from Taylor series: in space [-1:2:-1]/dx2, in time [2:-5:4:-1]/dt2
+
+  # HOW TO USE: (PETSc has to be installed)
+    make all
+    ./run_O22.sh
+
+  Modify run_O22.sh if need to change runtime keyes and number of processors
 */
 
 #include <stdio.h>
@@ -122,9 +133,9 @@ main(int argc, char * args[])
     VARIABLES
   */
 
-  bool  FOUTPUT                 = true;
-  bool  SAVE_WAVEFIELD_MATLAB   = false;
-  int   IT_DISPLAY              = 50;
+  bool  FOUTPUT                 = true; // Print information each IT_DISPLAY steps
+  bool  SAVE_WAVEFIELD_MATLAB   = false; // Save the whole wavefield to .m file each IT_DISPLAY steps
+  int   IT_DISPLAY              = 50; // Number of time steps to give output
 
   struct stat st = {0};
 
